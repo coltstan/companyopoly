@@ -1,0 +1,12 @@
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temp capture/verification files
+_*.ps1
+_*.png
+_*.b64
+_*.jpg
+_verify*
+_cap*

@@ -1,0 +1,1014 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Company-opoly — Big Tech Board Game</title>
+<style>
+  :root {
+    --bg: #0f1219;
+    --board-bg: #cfe3cf;
+    --cell-bg: #e8f3e8;
+    --line: #1b1f2a;
+    --accent: #4f8cff;
+    --tilt: 38deg;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: #e8eaf0;
+    font-family: 'Segoe UI', Arial, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 16px;
+    gap: 16px;
+  }
+
+  /* ---------- Setup screen ---------- */
+  #setup {
+    max-width: 520px;
+    margin: 60px auto;
+    background: #181d29;
+    border: 1px solid #2a3145;
+    border-radius: 14px;
+    padding: 32px;
+  }
+  #setup h1 { font-size: 30px; margin-bottom: 4px; }
+  #setup .tagline { color: #9aa3b8; margin-bottom: 24px; }
+  #setup label { display: block; margin: 14px 0 6px; color: #c3c9d8; font-size: 14px; }
+  #setup select, #setup input {
+    width: 100%;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid #2a3145;
+    background: #10141e;
+    color: #e8eaf0;
+    font-size: 15px;
+  }
+  #setup button {
+    margin-top: 24px;
+    width: 100%;
+    padding: 14px;
+    font-size: 17px;
+    font-weight: 700;
+    border: none;
+    border-radius: 10px;
+    background: var(--accent);
+    color: #fff;
+    cursor: pointer;
+  }
+  #setup button:hover { filter: brightness(1.1); }
+
+  /* ---------- Board (3D) ---------- */
+  #game { display: none; gap: 16px; align-items: flex-start; }
+  #board-scene {
+    width: 850px;
+    height: 700px;
+    perspective: 1600px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  #board {
+    display: grid;
+    grid-template-columns: 110px repeat(9, 64px) 110px;
+    grid-template-rows: 110px repeat(9, 64px) 110px;
+    background: var(--line);
+    gap: 2px;
+    border: 3px solid var(--line);
+    border-radius: 8px;
+    flex-shrink: 0;
+    transform-style: preserve-3d;
+    transform: rotateX(var(--tilt));
+    box-shadow: 0 50px 90px rgba(0,0,0,.6);
+  }
+  .cell {
+    background: var(--cell-bg);
+    color: #14181f;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 3px 2px;
+    font-size: 9px;
+    text-align: center;
+    line-height: 1.15;
+    transform-style: preserve-3d;
+    transition: transform .15s;
+  }
+  .cell:hover { transform: translateZ(16px); }
+  .cell.corner { font-size: 11px; font-weight: 700; justify-content: center; background: var(--board-bg); }
+  .cell .bar { width: 100%; height: 12px; flex-shrink: 0; margin-bottom: 2px; border-radius: 2px; }
+  .cell .nm { font-weight: 700; }
+  .cell .pr { color: #3a4254; margin-top: 1px; }
+  .cell .em { font-size: 14px; line-height: 1; margin-top: 1px; }
+  .cell .lvl {
+    color: #0a7a0a; font-size: 11px; letter-spacing: -1px;
+    transform: rotateX(calc(-1 * var(--tilt)));
+    transform-origin: 50% 100%;
+  }
+  .cell .owner-dot {
+    position: absolute; top: 1px; right: 2px;
+    width: 9px; height: 9px; border-radius: 50%;
+    border: 1px solid #0008;
+  }
+  .cell .tokens {
+    position: absolute; bottom: 1px; left: 0; right: 0;
+    display: flex; justify-content: center; gap: 0;
+    font-size: 16px;
+    transform: rotateX(calc(-1 * var(--tilt)));
+    transform-origin: 50% 100%;
+    text-shadow: 0 3px 4px rgba(0,0,0,.35);
+  }
+  .cell.active-cell { outline: 3px solid #ffce3a; outline-offset: -3px; z-index: 2; }
+
+  #center {
+    grid-row: 2 / 11;
+    grid-column: 2 / 11;
+    background: var(--board-bg);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: #14181f;
+    padding: 18px;
+    gap: 12px;
+    transform-style: preserve-3d;
+  }
+  #center h1 {
+    font-size: 34px;
+    letter-spacing: 1px;
+    color: #b3262e;
+    text-shadow: 1px 1px 0 #fff;
+    transform: rotate(-3deg);
+  }
+  #turn-banner { font-size: 17px; font-weight: 700; }
+  #dice {
+    height: 70px;
+    display: flex; gap: 20px;
+    align-items: center; justify-content: center;
+    transform-style: preserve-3d;
+    transform: rotateX(calc(-1 * var(--tilt)));
+  }
+  .die { width: 46px; height: 46px; transform-style: preserve-3d; }
+  .cube {
+    width: 100%; height: 100%;
+    position: relative;
+    transform-style: preserve-3d;
+    transform: rotateX(-18deg) rotateY(28deg);
+    transition: transform .95s cubic-bezier(.25,.8,.3,1);
+  }
+  .face {
+    position: absolute; inset: 0;
+    background: #fafafa;
+    border: 1px solid #aaa;
+    border-radius: 7px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(3, 1fr);
+    padding: 5px;
+  }
+  .pip { width: 8px; height: 8px; background: #14181f; border-radius: 50%; align-self: center; justify-self: center; }
+  #center-msg { font-size: 14px; min-height: 36px; text-align: center; max-width: 380px; }
+  .btn-row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+  .game-btn {
+    padding: 12px 22px;
+    font-size: 16px;
+    font-weight: 700;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    color: #fff;
+    background: #2563eb;
+  }
+  .game-btn.secondary { background: #475569; }
+  .game-btn:disabled { opacity: 0.35; cursor: default; }
+  .game-btn:not(:disabled):hover { filter: brightness(1.12); }
+
+  /* ---------- Sidebar ---------- */
+  #sidebar { width: 320px; display: flex; flex-direction: column; gap: 12px; }
+  .panel {
+    background: #181d29;
+    border: 1px solid #2a3145;
+    border-radius: 12px;
+    padding: 14px;
+  }
+  .panel h3 { font-size: 14px; color: #9aa3b8; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px; }
+  .pcard {
+    border: 2px solid transparent;
+    border-radius: 9px;
+    padding: 8px 10px;
+    margin-bottom: 8px;
+    background: #10141e;
+  }
+  .pcard.current { border-color: #ffce3a; }
+  .pcard.dead { opacity: 0.4; text-decoration: line-through; }
+  .pcard .prow { display: flex; justify-content: space-between; align-items: center; font-weight: 700; }
+  .pcard .cash { color: #6ee787; }
+  .prop-chips { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 5px; }
+  .chip { width: 14px; height: 14px; border-radius: 3px; border: 1px solid #0006; cursor: default; }
+  #log {
+    height: 230px;
+    overflow-y: auto;
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: #c3c9d8;
+  }
+  #log div { padding: 2px 0; border-bottom: 1px solid #20263500; }
+  #log .important { color: #ffce3a; }
+
+  /* ---------- Modal ---------- */
+  #overlay {
+    position: fixed; inset: 0;
+    background: #000a;
+    display: none;
+    align-items: center; justify-content: center;
+    z-index: 50;
+  }
+  #modal {
+    background: #1b2130;
+    border: 1px solid #38415c;
+    border-radius: 14px;
+    padding: 24px;
+    max-width: 440px;
+    width: 92%;
+    max-height: 80vh;
+    overflow-y: auto;
+  }
+  #modal h2 { font-size: 19px; margin-bottom: 10px; }
+  #modal .body { font-size: 14.5px; color: #c9cfdf; margin-bottom: 18px; line-height: 1.5; }
+  #modal .btn-row { justify-content: flex-end; }
+  .deed { border-radius: 8px; overflow: hidden; border: 1px solid #38415c; margin-bottom: 14px; }
+  .deed .deed-head { padding: 10px; font-weight: 800; text-align: center; color: #fff; text-shadow: 0 1px 2px #0008; }
+  .deed .deed-body { padding: 10px 14px; font-size: 13.5px; background: #10141e; }
+  .deed .deed-body div { display: flex; justify-content: space-between; padding: 2px 0; }
+  .manage-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 7px 4px; border-bottom: 1px solid #262d40; font-size: 13.5px;
+  }
+  .manage-row .chip { flex-shrink: 0; }
+  .manage-row .mname { flex: 1; }
+  .manage-row button {
+    padding: 4px 10px; border-radius: 6px; border: none; cursor: pointer;
+    font-size: 12px; font-weight: 700; color: #fff;
+  }
+  .manage-row .up { background: #16a34a; }
+  .manage-row .sell { background: #b3262e; }
+  .manage-row button:disabled { opacity: 0.3; cursor: default; }
+</style>
+</head>
+<body>
+
+<div id="setup">
+  <h1>🏙️ Company-opoly</h1>
+  <p class="tagline">Buy up today's biggest companies. Bankrupt your friends. Pass-and-play on one device.</p>
+  <label>Number of players</label>
+  <select id="num-players">
+    <option value="2">2 players</option>
+    <option value="3">3 players</option>
+    <option value="4">4 players</option>
+  </select>
+  <div id="name-inputs"></div>
+  <button id="start-btn">Start Game</button>
+</div>
+
+<div id="game">
+  <div id="board-scene"><div id="board"></div></div>
+  <div id="sidebar">
+    <div class="panel" id="players-panel"><h3>Players</h3><div id="players-list"></div></div>
+    <div class="panel"><h3>Game Log</h3><div id="log"></div></div>
+  </div>
+</div>
+
+<div id="overlay"><div id="modal"></div></div>
+
+<script>
+'use strict';
+
+/* ====================== DATA ====================== */
+
+const SECTORS = {
+  meme:      { label: 'Meme Stocks',  color: '#8d5524', upg: 50  },
+  social:    { label: 'Social Media', color: '#7fd1e8', upg: 50  },
+  gig:       { label: 'Gig Economy',  color: '#e85fa8', upg: 100 },
+  streaming: { label: 'Streaming',    color: '#f2933a', upg: 100 },
+  food:      { label: 'Food & Drink', color: '#d93a3a', upg: 150 },
+  fintech:   { label: 'Fintech',      color: '#f2d23a', upg: 150 },
+  bigtech:   { label: 'Big Tech',     color: '#2f9e44', upg: 200 },
+  ai:        { label: 'AI Giants',    color: '#1f4fd8', upg: 200 },
+};
+
+// type: prop | logi (railroads) | cloud (utilities) | go | jail | parking | gotojail | tax | chance | chest
+const SPACES = [
+  { type:'go',      name:'IPO DAY',          em:'🔔' },
+  { type:'prop',    name:'GameStop',         em:'🎮', sector:'meme',      price:60,  rent:4  },
+  { type:'chest',   name:'Earnings Report',  em:'📊' },
+  { type:'prop',    name:'AMC Theatres',     em:'🍿', sector:'meme',      price:60,  rent:4  },
+  { type:'tax',     name:'Capital Gains Tax',em:'🧾', amount:200 },
+  { type:'logi',    name:'FedEx',            em:'📦', price:200 },
+  { type:'prop',    name:'Snapchat',         em:'👻', sector:'social',    price:100, rent:6  },
+  { type:'chance',  name:'Trending',         em:'🔥' },
+  { type:'prop',    name:'Reddit',           em:'👽', sector:'social',    price:100, rent:6  },
+  { type:'prop',    name:'TikTok',           em:'🎵', sector:'social',    price:120, rent:8  },
+  { type:'jail',    name:'SEC DETENTION',    em:'⛓️' },
+  { type:'prop',    name:'Uber',             em:'🚗', sector:'gig',       price:140, rent:10 },
+  { type:'cloud',   name:'AWS Cloud',        em:'☁️', price:150 },
+  { type:'prop',    name:'Lyft',             em:'🛺', sector:'gig',       price:140, rent:10 },
+  { type:'prop',    name:'Airbnb',           em:'🏠', sector:'gig',       price:160, rent:12 },
+  { type:'logi',    name:'UPS',              em:'🚚', price:200 },
+  { type:'prop',    name:'Spotify',          em:'🎧', sector:'streaming', price:180, rent:14 },
+  { type:'chest',   name:'Earnings Report',  em:'📊' },
+  { type:'prop',    name:'Twitch',           em:'🟣', sector:'streaming', price:180, rent:14 },
+  { type:'prop',    name:'Netflix',          em:'🎬', sector:'streaming', price:200, rent:16 },
+  { type:'parking', name:'WEWORK LOUNGE',    em:'🛋️' },
+  { type:'prop',    name:'Starbucks',        em:'☕', sector:'food',      price:220, rent:18 },
+  { type:'chance',  name:'Trending',         em:'🔥' },
+  { type:'prop',    name:'Chipotle',         em:'🌯', sector:'food',      price:220, rent:18 },
+  { type:'prop',    name:"McDonald's",       em:'🍟', sector:'food',      price:240, rent:20 },
+  { type:'logi',    name:'DoorDash',         em:'🛵', price:200 },
+  { type:'prop',    name:'Robinhood',        em:'🏹', sector:'fintech',   price:260, rent:22 },
+  { type:'prop',    name:'Coinbase',         em:'🪙', sector:'fintech',   price:260, rent:22 },
+  { type:'cloud',   name:'Starlink',         em:'🛰️', price:150 },
+  { type:'prop',    name:'Stripe',           em:'💳', sector:'fintech',   price:280, rent:24 },
+  { type:'gotojail',name:'INSIDER TRADING!', em:'🚨' },
+  { type:'prop',    name:'Meta',             em:'🌐', sector:'bigtech',   price:300, rent:26 },
+  { type:'prop',    name:'Amazon',           em:'🛒', sector:'bigtech',   price:300, rent:26 },
+  { type:'chest',   name:'Earnings Report',  em:'📊' },
+  { type:'prop',    name:'Google',           em:'🔍', sector:'bigtech',   price:320, rent:28 },
+  { type:'logi',    name:'Instacart',        em:'🥕', price:200 },
+  { type:'chance',  name:'Trending',         em:'🔥' },
+  { type:'prop',    name:'OpenAI',           em:'🤖', sector:'ai',        price:350, rent:35 },
+  { type:'tax',     name:'Subscription Fees',em:'💸', amount:100 },
+  { type:'prop',    name:'Nvidia',           em:'💚', sector:'ai',        price:400, rent:50 },
+];
+
+SPACES.forEach(sp => { if (sp.price) { sp.owner = null; sp.level = 0; } });
+
+const RENT_MULT = [1, 5, 12, 25, 45]; // by upgrade level 0-4
+const JAIL_POS = 10;
+const GO_SALARY = 200;
+const JAIL_FINE = 50;
+
+const TRENDING_CARDS = [
+  { text:'Your portfolio gets featured on a viral TikTok. Collect $150.', money:150 },
+  { text:'SEC opens an investigation into your trades. Pay $100.', money:-100 },
+  { text:'AI hype rally! Everything you touch goes up. Collect $200.', money:200 },
+  { text:'Crypto winter hits your holdings. Pay $80.', money:-80 },
+  { text:'Elon tweets about your company. Stock pops. Collect $90.', money:90 },
+  { text:'Data breach — pay regulatory fines of $150.', money:-150 },
+  { text:'Advance to IPO DAY. Collect $200.', goto:0 },
+  { text:'You bought the dip at the perfect time. Collect $120.', money:120 },
+  { text:'Insider trading allegations! Go directly to SEC Detention.', jail:true },
+  { text:'Your meme coin rug-pulls. Pay $60.', money:-60 },
+];
+
+const EARNINGS_CARDS = [
+  { text:'Quarterly earnings beat estimates. Collect $100.', money:100 },
+  { text:'Mass layoffs — severance packages cost you $75.', money:-75 },
+  { text:'Government subsidy approved. Collect $150.', money:150 },
+  { text:'Server outage — customer refunds cost $50.', money:-50 },
+  { text:'Dividend payout lands in your account. Collect $60.', money:60 },
+  { text:'Tax refund. Collect $20.', money:20 },
+  { text:'Antitrust fine from the FTC. Pay $120.', money:-120 },
+  { text:'You win a startup pitch competition. Collect $100.', money:100 },
+  { text:'Office snacks budget audit. Pay $40.', money:-40 },
+  { text:'Your side project gets acquired. Collect $130.', money:130 },
+];
+
+const TOKEN_EMOJI = ['🚀', '💎', '🤖', '🦄'];
+const PLAYER_COLORS = ['#4f8cff', '#ff5d5d', '#3ecf6e', '#c77dff'];
+
+/* ====================== STATE ====================== */
+
+const state = {
+  players: [],
+  turn: 0,          // index into players
+  doubles: 0,
+  lastRoll: 0,
+  rolled: false,
+  trendingDeck: [],
+  earningsDeck: [],
+  over: false,
+};
+
+function shuffle(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+/* ====================== DOM HELPERS ====================== */
+
+const $ = id => document.getElementById(id);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const fmt = n => '$' + n.toLocaleString();
+
+function log(msg, important) {
+  const div = document.createElement('div');
+  div.textContent = msg;
+  if (important) div.className = 'important';
+  $('log').prepend(div);
+}
+
+// Promise-based modal. buttons: [{label, value, cls}]
+function dialog(title, bodyHTML, buttons) {
+  return new Promise(resolve => {
+    const modal = $('modal');
+    modal.innerHTML = `<h2>${title}</h2><div class="body">${bodyHTML}</div><div class="btn-row"></div>`;
+    const row = modal.querySelector('.btn-row');
+    buttons.forEach(b => {
+      const btn = document.createElement('button');
+      btn.className = 'game-btn' + (b.cls ? ' ' + b.cls : '');
+      btn.textContent = b.label;
+      btn.onclick = () => { $('overlay').style.display = 'none'; resolve(b.value); };
+      row.appendChild(btn);
+    });
+    $('overlay').style.display = 'flex';
+  });
+}
+
+function deedHTML(sp) {
+  const sec = SECTORS[sp.sector];
+  return `<div class="deed">
+    <div class="deed-head" style="background:${sec.color}">${sp.em} ${sp.name}<br><small>${sec.label}</small></div>
+    <div class="deed-body">
+      <div><span>Price</span><b>${fmt(sp.price)}</b></div>
+      <div><span>Base rent</span><b>${fmt(sp.rent)}</b></div>
+      <div><span>Rent w/ full sector</span><b>${fmt(sp.rent * 2)}</b></div>
+      <div><span>Rent at max upgrades</span><b>${fmt(sp.rent * RENT_MULT[4])}</b></div>
+      <div><span>Upgrade cost</span><b>${fmt(sec.upg)} each</b></div>
+    </div>
+  </div>`;
+}
+
+/* ====================== BOARD RENDERING ====================== */
+
+function gridPos(i) {
+  if (i <= 10) return { row: 11, col: 11 - i };
+  if (i <= 20) return { row: 11 - (i - 10), col: 1 };
+  if (i <= 30) return { row: 1, col: i - 20 + 1 };
+  return { row: i - 30 + 1, col: 11 };
+}
+
+function buildBoard() {
+  const board = $('board');
+  SPACES.forEach((sp, i) => {
+    const cell = document.createElement('div');
+    cell.id = 'cell-' + i;
+    const { row, col } = gridPos(i);
+    cell.style.gridRow = row;
+    cell.style.gridColumn = col;
+    const corner = ['go','jail','parking','gotojail'].includes(sp.type);
+    cell.className = 'cell' + (corner ? ' corner' : '');
+    let html = '';
+    if (sp.type === 'prop') html += `<div class="bar" style="background:${SECTORS[sp.sector].color}"></div>`;
+    html += `<div class="em">${sp.em}</div><div class="nm">${sp.name}</div>`;
+    if (sp.price) html += `<div class="pr">${fmt(sp.price)}</div>`;
+    html += `<div class="lvl"></div><div class="tokens"></div>`;
+    cell.innerHTML = html;
+    board.appendChild(cell);
+  });
+  const center = document.createElement('div');
+  center.id = 'center';
+  center.innerHTML = `
+    <h1>COMPANY-OPOLY</h1>
+    <div id="turn-banner"></div>
+    <div id="dice"></div>
+    <div id="center-msg"></div>
+    <div class="btn-row">
+      <button class="game-btn" id="roll-btn">🎲 Roll Dice</button>
+      <button class="game-btn secondary" id="manage-btn">🏗️ Manage</button>
+      <button class="game-btn secondary" id="end-btn">End Turn ➡️</button>
+    </div>`;
+  board.appendChild(center);
+  $('dice').appendChild(buildDie('cube1'));
+  $('dice').appendChild(buildDie('cube2'));
+  $('roll-btn').onclick = onRoll;
+  $('end-btn').onclick = endTurn;
+  $('manage-btn').onclick = () => openManage(currentPlayer(), false);
+}
+
+function renderTokens() {
+  document.querySelectorAll('.cell .tokens').forEach(t => t.textContent = '');
+  document.querySelectorAll('.cell').forEach(c => c.classList.remove('active-cell'));
+  state.players.forEach(p => {
+    if (!p.alive) return;
+    $('cell-' + p.pos).querySelector('.tokens').textContent += p.token;
+  });
+  const cur = currentPlayer();
+  if (cur && cur.alive) $('cell-' + cur.pos).classList.add('active-cell');
+}
+
+function renderOwnership() {
+  SPACES.forEach((sp, i) => {
+    if (!sp.price) return;
+    const cell = $('cell-' + i);
+    let dot = cell.querySelector('.owner-dot');
+    if (sp.owner == null) { if (dot) dot.remove(); }
+    else {
+      if (!dot) { dot = document.createElement('div'); dot.className = 'owner-dot'; cell.appendChild(dot); }
+      dot.style.background = state.players[sp.owner].color;
+    }
+    const lvl = cell.querySelector('.lvl');
+    if (lvl) lvl.textContent = sp.level ? (sp.level === 4 ? '🏛️' : '🏢'.repeat(sp.level)) : '';
+  });
+}
+
+function renderPlayers() {
+  const list = $('players-list');
+  list.innerHTML = '';
+  state.players.forEach((p, idx) => {
+    const card = document.createElement('div');
+    card.className = 'pcard' + (idx === state.turn ? ' current' : '') + (p.alive ? '' : ' dead');
+    card.style.borderLeft = `5px solid ${p.color}`;
+    const props = SPACES.map((sp, i) => ({ sp, i })).filter(x => x.sp.owner === idx);
+    const chips = props.map(x => {
+      const c = x.sp.type === 'prop' ? SECTORS[x.sp.sector].color : (x.sp.type === 'logi' ? '#555' : '#999');
+      return `<div class="chip" style="background:${c}" title="${x.sp.name}${x.sp.level ? ' (lvl ' + x.sp.level + ')' : ''}"></div>`;
+    }).join('');
+    card.innerHTML = `
+      <div class="prow"><span>${p.token} ${p.name}${p.inJail ? ' ⛓️' : ''}</span><span class="cash">${p.alive ? fmt(p.cash) : 'BANKRUPT'}</span></div>
+      <div class="prop-chips">${chips}</div>`;
+    list.appendChild(card);
+  });
+}
+
+function renderAll() {
+  renderTokens();
+  renderOwnership();
+  renderPlayers();
+}
+
+function setButtons({ roll, end, manage }) {
+  $('roll-btn').disabled = !roll;
+  $('end-btn').disabled = !end;
+  $('manage-btn').disabled = !manage;
+}
+
+function centerMsg(msg) { $('center-msg').textContent = msg; }
+
+/* ====================== GAME LOGIC ====================== */
+
+function currentPlayer() { return state.players[state.turn]; }
+
+function alivePlayers() { return state.players.filter(p => p.alive); }
+
+function ownsFullSector(playerIdx, sector) {
+  return SPACES.filter(sp => sp.sector === sector).every(sp => sp.owner === playerIdx);
+}
+
+function countOwned(playerIdx, type) {
+  return SPACES.filter(sp => sp.type === type && sp.owner === playerIdx).length;
+}
+
+function rentFor(spaceIdx) {
+  const sp = SPACES[spaceIdx];
+  if (sp.type === 'logi') return 25 * Math.pow(2, countOwned(sp.owner, 'logi') - 1);
+  if (sp.type === 'cloud') return state.lastRoll * (countOwned(sp.owner, 'cloud') === 2 ? 10 : 4);
+  let rent = sp.rent * RENT_MULT[sp.level];
+  if (sp.level === 0 && ownsFullSector(sp.owner, sp.sector)) rent *= 2;
+  return rent;
+}
+
+function startTurn() {
+  if (state.over) return;
+  const p = currentPlayer();
+  state.doubles = 0;
+  state.rolled = false;
+  $('turn-banner').textContent = `${p.token} ${p.name}'s turn`;
+  centerMsg(p.inJail ? 'You are in SEC Detention. Roll doubles or pay the fine.' : 'Roll the dice!');
+  setButtons({ roll: true, end: false, manage: true });
+  renderAll();
+}
+
+/* ---------- 3D dice ---------- */
+
+const PIPS = { 1:[4], 2:[0,8], 3:[0,4,8], 4:[0,2,6,8], 5:[0,2,4,6,8], 6:[0,2,3,5,6,8] };
+// face orientation on the cube (1 opp 6, 2 opp 5, 3 opp 4)
+const FACE_TF = {
+  1:'rotateY(0deg)', 6:'rotateY(180deg)',
+  3:'rotateY(90deg)', 4:'rotateY(-90deg)',
+  5:'rotateX(90deg)', 2:'rotateX(-90deg)',
+};
+// cube rotation that brings each value to the front
+const DICE_ROT = { 1:[0,0], 2:[90,0], 3:[0,-90], 4:[0,90], 5:[-90,0], 6:[0,180] };
+let diceSpins = 0;
+
+function buildDie(id) {
+  const die = document.createElement('div');
+  die.className = 'die';
+  const cube = document.createElement('div');
+  cube.className = 'cube';
+  cube.id = id;
+  for (const v of [1, 2, 3, 4, 5, 6]) {
+    const f = document.createElement('div');
+    f.className = 'face';
+    f.style.transform = FACE_TF[v] + ' translateZ(23px)';
+    for (let i = 0; i < 9; i++) {
+      const d = document.createElement('div');
+      if (PIPS[v].includes(i)) d.className = 'pip';
+      f.appendChild(d);
+    }
+    cube.appendChild(f);
+  }
+  die.appendChild(cube);
+  return die;
+}
+
+function showDice(d1, d2) {
+  diceSpins++;
+  [['cube1', d1, 2], ['cube2', d2, 3]].forEach(([id, v, k]) => {
+    const [rx, ry] = DICE_ROT[v];
+    const extra = 360 * (diceSpins + k);
+    $(id).style.transform = `rotateX(${rx + extra}deg) rotateY(${ry - extra}deg)`;
+  });
+}
+
+async function onRoll() {
+  const p = currentPlayer();
+  setButtons({ roll: false, end: false, manage: false });
+
+  // Jail handling
+  if (p.inJail) {
+    let choice = 'roll';
+    if (p.cash >= JAIL_FINE) {
+      choice = await dialog('⛓️ SEC Detention',
+        `Pay the ${fmt(JAIL_FINE)} fine to get out now, or try to roll doubles (attempt ${p.jailTurns + 1} of 3).`,
+        [{ label: `Pay ${fmt(JAIL_FINE)}`, value: 'pay' }, { label: 'Roll for doubles', value: 'roll', cls: 'secondary' }]);
+    }
+    if (choice === 'pay') {
+      p.cash -= JAIL_FINE;
+      p.inJail = false; p.jailTurns = 0;
+      log(`${p.name} paid ${fmt(JAIL_FINE)} to leave SEC Detention.`);
+    }
+  }
+
+  const d1 = 1 + Math.floor(Math.random() * 6);
+  const d2 = 1 + Math.floor(Math.random() * 6);
+  state.lastRoll = d1 + d2;
+  state.rolled = true;
+
+  // tumble the 3D dice
+  showDice(d1, d2);
+  await sleep(1000);
+  log(`${p.name} rolled ${d1} + ${d2} = ${d1 + d2}.`);
+
+  if (p.inJail) {
+    if (d1 === d2) {
+      p.inJail = false; p.jailTurns = 0;
+      log(`${p.name} rolled doubles and is released!`, true);
+      await movePlayer(p, d1 + d2);
+      await resolveSpace(p);
+    } else {
+      p.jailTurns++;
+      if (p.jailTurns >= 3) {
+        log(`${p.name} failed 3 times and must pay the ${fmt(JAIL_FINE)} fine.`);
+        const paid = await settleDebt(p, JAIL_FINE, null);
+        if (paid) {
+          p.inJail = false; p.jailTurns = 0;
+          await movePlayer(p, d1 + d2);
+          await resolveSpace(p);
+        }
+      } else {
+        centerMsg('No doubles. Still detained.');
+      }
+    }
+    finishRollPhase(false);
+    return;
+  }
+
+  // Doubles tracking
+  let extraRoll = false;
+  if (d1 === d2) {
+    state.doubles++;
+    if (state.doubles >= 3) {
+      log(`${p.name} rolled 3 doubles in a row — straight to SEC Detention!`, true);
+      sendToJail(p);
+      finishRollPhase(false);
+      return;
+    }
+    extraRoll = true;
+  }
+
+  await movePlayer(p, d1 + d2);
+  await resolveSpace(p);
+  if (p.inJail || !p.alive) extraRoll = false;
+  finishRollPhase(extraRoll);
+}
+
+function finishRollPhase(extraRoll) {
+  if (state.over) return;
+  renderAll();
+  const p = currentPlayer();
+  if (!p.alive) { endTurn(); return; }
+  if (extraRoll) {
+    centerMsg('Doubles! Roll again.');
+    setButtons({ roll: true, end: false, manage: true });
+  } else {
+    setButtons({ roll: false, end: true, manage: true });
+  }
+}
+
+async function movePlayer(p, steps) {
+  for (let s = 0; s < steps; s++) {
+    p.pos = (p.pos + 1) % 40;
+    if (p.pos === 0) {
+      p.cash += GO_SALARY;
+      log(`${p.name} passed IPO DAY and collected ${fmt(GO_SALARY)}.`);
+    }
+    renderTokens();
+    renderPlayers();
+    await sleep(110);
+  }
+}
+
+function sendToJail(p) {
+  p.pos = JAIL_POS;
+  p.inJail = true;
+  p.jailTurns = 0;
+  state.doubles = 0;
+  renderAll();
+}
+
+async function resolveSpace(p) {
+  const sp = SPACES[p.pos];
+  centerMsg(`${sp.em} ${sp.name}`);
+
+  switch (sp.type) {
+    case 'go':
+    case 'jail':
+      break;
+    case 'parking':
+      log(`${p.name} chills at the WeWork Lounge. Free kombucha.`);
+      break;
+    case 'gotojail':
+      log(`${p.name} got caught insider trading! Off to SEC Detention.`, true);
+      sendToJail(p);
+      break;
+    case 'tax': {
+      log(`${p.name} owes ${sp.name}: ${fmt(sp.amount)}.`);
+      await settleDebt(p, sp.amount, null);
+      break;
+    }
+    case 'chance':
+      await drawCard(p, 'trending');
+      break;
+    case 'chest':
+      await drawCard(p, 'earnings');
+      break;
+    case 'prop':
+    case 'logi':
+    case 'cloud':
+      await resolveOwnable(p, p.pos);
+      break;
+  }
+  renderAll();
+  checkGameOver();
+}
+
+async function resolveOwnable(p, idx) {
+  const sp = SPACES[idx];
+  if (sp.owner == null) {
+    if (p.cash >= sp.price) {
+      const body = sp.type === 'prop'
+        ? deedHTML(sp)
+        : `<b>${sp.em} ${sp.name}</b> — ${sp.type === 'logi' ? 'Logistics company. Rent: $25 / $50 / $100 / $200 depending on how many you own.' : 'Cloud service. Rent: 4× your dice roll, or 10× if you own both.'}<br><br>Price: <b>${fmt(sp.price)}</b>`;
+      const buy = await dialog(`Buy ${sp.name}?`, body + `<br>You have <b>${fmt(p.cash)}</b>.`,
+        [{ label: `Buy for ${fmt(sp.price)}`, value: true }, { label: 'Pass', value: false, cls: 'secondary' }]);
+      if (buy) {
+        p.cash -= sp.price;
+        sp.owner = state.turn;
+        log(`${p.name} acquired ${sp.name} for ${fmt(sp.price)}.`, true);
+      } else {
+        log(`${p.name} passed on ${sp.name}.`);
+      }
+    } else {
+      centerMsg(`${sp.name} is for sale (${fmt(sp.price)}) but you can't afford it.`);
+      log(`${p.name} can't afford ${sp.name}.`);
+    }
+  } else if (sp.owner === state.turn) {
+    centerMsg(`You own ${sp.name}. Welcome home.`);
+  } else if (state.players[sp.owner].alive) {
+    const owner = state.players[sp.owner];
+    const rent = rentFor(idx);
+    log(`${p.name} landed on ${sp.name} (owned by ${owner.name}). Rent: ${fmt(rent)}.`);
+    await settleDebt(p, rent, owner);
+  }
+}
+
+async function drawCard(p, deckName) {
+  const deckKey = deckName === 'trending' ? 'trendingDeck' : 'earningsDeck';
+  const source = deckName === 'trending' ? TRENDING_CARDS : EARNINGS_CARDS;
+  if (state[deckKey].length === 0) state[deckKey] = shuffle(source);
+  const card = state[deckKey].pop();
+  const title = deckName === 'trending' ? '🔥 Trending' : '📊 Earnings Report';
+  await dialog(title, card.text, [{ label: 'OK', value: true }]);
+  log(`${title}: ${card.text}`);
+
+  if (card.jail) { sendToJail(p); return; }
+  if (card.goto != null) {
+    if (card.goto === 0) { p.cash += GO_SALARY; }
+    p.pos = card.goto;
+    renderAll();
+    return;
+  }
+  if (card.money > 0) {
+    p.cash += card.money;
+  } else if (card.money < 0) {
+    await settleDebt(p, -card.money, null);
+  }
+}
+
+/*
+ * Make `p` pay `amount` to `recipient` (null = the bank).
+ * If they can't cover it, open the asset-sale flow; returns false on bankruptcy.
+ */
+async function settleDebt(p, amount, recipient) {
+  while (p.cash < amount) {
+    const sellable = SPACES.map((sp, i) => ({ sp, i }))
+      .filter(x => x.sp.owner === state.players.indexOf(p));
+    if (sellable.length === 0) break;
+    const sold = await openManage(p, true, amount, recipient);
+    if (!sold) break; // chose bankruptcy
+  }
+
+  if (p.cash >= amount) {
+    p.cash -= amount;
+    if (recipient) {
+      recipient.cash += amount;
+      log(`${p.name} paid ${fmt(amount)} to ${recipient.name}.`);
+    } else {
+      log(`${p.name} paid ${fmt(amount)} to the bank.`);
+    }
+    renderPlayers();
+    return true;
+  }
+
+  // Bankruptcy
+  await bankrupt(p, recipient);
+  return false;
+}
+
+async function bankrupt(p, creditor) {
+  const idx = state.players.indexOf(p);
+  p.alive = false;
+  if (creditor) {
+    creditor.cash += Math.max(0, p.cash);
+    SPACES.forEach(sp => { if (sp.owner === idx) { sp.owner = state.players.indexOf(creditor); } });
+    log(`💀 ${p.name} is BANKRUPT! All assets go to ${creditor.name}.`, true);
+  } else {
+    SPACES.forEach(sp => { if (sp.owner === idx) { sp.owner = null; sp.level = 0; } });
+    log(`💀 ${p.name} is BANKRUPT! Assets returned to the market.`, true);
+  }
+  p.cash = 0;
+  renderAll();
+  checkGameOver();
+}
+
+function checkGameOver() {
+  const alive = alivePlayers();
+  if (alive.length === 1 && !state.over) {
+    state.over = true;
+    const w = alive[0];
+    setButtons({ roll: false, end: false, manage: false });
+    $('turn-banner').textContent = `🏆 ${w.token} ${w.name} WINS!`;
+    centerMsg('Monopoly achieved. The FTC has been notified.');
+    log(`🏆 ${w.name} wins the game!`, true);
+    dialog('🏆 Game Over', `<b>${w.name}</b> has bankrupted everyone and now controls the entire economy. Congratulations!`,
+      [{ label: 'Play Again', value: true }]).then(() => location.reload());
+  }
+}
+
+/*
+ * Manage/sell modal. In debt mode (debtAmount set) the player must raise cash;
+ * returns true if they sold something, false if they chose bankruptcy.
+ * In normal mode, allows upgrades and selling; returns when closed.
+ */
+function openManage(p, debtMode, debtAmount, creditor) {
+  return new Promise(resolve => {
+    const idx = state.players.indexOf(p);
+    const modal = $('modal');
+
+    function render() {
+      const owned = SPACES.map((sp, i) => ({ sp, i })).filter(x => x.sp.owner === idx);
+      let rows = owned.map(x => {
+        const sp = x.sp;
+        const color = sp.type === 'prop' ? SECTORS[sp.sector].color : (sp.type === 'logi' ? '#555' : '#999');
+        const sellValue = Math.floor(sp.price / 2) + (sp.level ? Math.floor(sp.level * SECTORS[sp.sector].upg / 2) : 0);
+        const canUpgrade = !debtMode && sp.type === 'prop' && ownsFullSector(idx, sp.sector)
+          && sp.level < 4 && p.cash >= SECTORS[sp.sector].upg;
+        const lvlTxt = sp.level ? ` · lvl ${sp.level}` : '';
+        return `<div class="manage-row">
+          <div class="chip" style="background:${color}"></div>
+          <div class="mname">${sp.em} ${sp.name}${lvlTxt}</div>
+          ${sp.type === 'prop' ? `<button class="up" data-up="${x.i}" ${canUpgrade ? '' : 'disabled'}>+🏢 ${fmt(SECTORS[sp.sector].upg)}</button>` : ''}
+          <button class="sell" data-sell="${x.i}" data-val="${sellValue}">Sell ${fmt(sellValue)}</button>
+        </div>`;
+      }).join('');
+      if (owned.length === 0) rows = '<i>You own nothing. Capitalism is hard.</i>';
+
+      const head = debtMode
+        ? `<b style="color:#ff5d5d">You owe ${fmt(debtAmount)}${creditor ? ' to ' + creditor.name : ''} and have ${fmt(p.cash)}.</b><br>Sell assets to cover it, or declare bankruptcy.`
+        : `Cash: <b>${fmt(p.cash)}</b>. Upgrade companies in sectors you fully own (max 4 levels — 4th is the 🏛️ HQ). Sell anything back at half price.`;
+
+      modal.innerHTML = `<h2>🏗️ ${p.name}'s Portfolio</h2><div class="body">${head}<div style="margin-top:10px">${rows}</div></div><div class="btn-row"></div>`;
+      const btnRow = modal.querySelector('.btn-row');
+
+      if (debtMode) {
+        const payBtn = document.createElement('button');
+        payBtn.className = 'game-btn';
+        payBtn.textContent = `Pay ${fmt(debtAmount)}`;
+        payBtn.disabled = p.cash < debtAmount;
+        payBtn.onclick = () => close(true);
+        btnRow.appendChild(payBtn);
+        const bk = document.createElement('button');
+        bk.className = 'game-btn secondary';
+        bk.textContent = '💀 Declare Bankruptcy';
+        bk.onclick = () => close(false);
+        btnRow.appendChild(bk);
+      } else {
+        const done = document.createElement('button');
+        done.className = 'game-btn';
+        done.textContent = 'Done';
+        done.onclick = () => close(true);
+        btnRow.appendChild(done);
+      }
+
+      modal.querySelectorAll('[data-up]').forEach(b => b.onclick = () => {
+        const sp = SPACES[+b.dataset.up];
+        p.cash -= SECTORS[sp.sector].upg;
+        sp.level++;
+        log(`${p.name} upgraded ${sp.name} to level ${sp.level}.`);
+        renderAll(); render();
+      });
+      modal.querySelectorAll('[data-sell]').forEach(b => b.onclick = () => {
+        const sp = SPACES[+b.dataset.sell];
+        p.cash += +b.dataset.val;
+        log(`${p.name} sold ${sp.name} back to the market for ${fmt(b.dataset.val)}.`);
+        sp.owner = null; sp.level = 0;
+        renderAll(); render();
+      });
+    }
+
+    function close(val) {
+      $('overlay').style.display = 'none';
+      renderAll();
+      resolve(val);
+    }
+
+    render();
+    $('overlay').style.display = 'flex';
+  });
+}
+
+function endTurn() {
+  if (state.over) return;
+  let next = state.turn;
+  do { next = (next + 1) % state.players.length; } while (!state.players[next].alive);
+  state.turn = next;
+  startTurn();
+}
+
+/* ====================== SETUP ====================== */
+
+function renderNameInputs() {
+  const n = +$('num-players').value;
+  const box = $('name-inputs');
+  box.innerHTML = '';
+  for (let i = 0; i < n; i++) {
+    box.insertAdjacentHTML('beforeend',
+      `<label>Player ${i + 1} ${TOKEN_EMOJI[i]}</label><input id="pname-${i}" placeholder="Player ${i + 1}" maxlength="14">`);
+  }
+}
+
+$('num-players').onchange = renderNameInputs;
+renderNameInputs();
+
+$('start-btn').onclick = () => {
+  const n = +$('num-players').value;
+  state.players = [];
+  for (let i = 0; i < n; i++) {
+    const name = $('pname-' + i).value.trim() || `Player ${i + 1}`;
+    state.players.push({
+      name, token: TOKEN_EMOJI[i], color: PLAYER_COLORS[i],
+      cash: 1500, pos: 0, inJail: false, jailTurns: 0, alive: true,
+    });
+  }
+  state.trendingDeck = shuffle(TRENDING_CARDS);
+  state.earningsDeck = shuffle(EARNINGS_CARDS);
+  $('setup').style.display = 'none';
+  $('game').style.display = 'flex';
+  buildBoard();
+  log(`Game started with ${n} players. Everyone starts with ${fmt(1500)}.`, true);
+  startTurn();
+};
+</script>
+</body>
+</html>

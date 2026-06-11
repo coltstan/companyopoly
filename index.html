@@ -1,0 +1,2688 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Companyopoly — The Market Is the Board</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%236ea0ff'/%3E%3Cstop offset='1' stop-color='%237a5bff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='16' fill='url(%23g)'/%3E%3Ctext x='32' y='44' font-family='Arial' font-size='34' font-weight='900' fill='white' text-anchor='middle'%3EC%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0c12;
+    --text: #eef1f8;
+    --muted: #98a2b8;
+    --accent: #4f8bff;
+    --accent2: #7a5bff;
+    --green: #30d18c;
+    --red: #ff6b6b;
+    --gold: #ffd166;
+    --glass-bg: rgba(22, 26, 38, 0.55);
+    --glass-stroke: rgba(255, 255, 255, 0.12);
+    --r-lg: 24px;
+    --r-md: 16px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    overflow: hidden;
+    height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+  #scene { position: fixed; inset: 0; }
+  #scene canvas { display: block; }
+  .hidden { display: none !important; }
+
+  /* ---------- Liquid glass primitives ---------- */
+  .glass {
+    background:
+      linear-gradient(160deg, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.02) 45%, rgba(255,255,255,0.06) 100%),
+      var(--glass-bg);
+    backdrop-filter: blur(28px) saturate(1.8);
+    -webkit-backdrop-filter: blur(28px) saturate(1.8);
+    border: 1px solid var(--glass-stroke);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.22),
+      inset 0 -1px 0 rgba(0,0,0,0.25),
+      0 24px 60px rgba(0,0,0,0.55);
+  }
+  @keyframes float-in {
+    from { opacity: 0; transform: translateY(16px) scale(0.98); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  @keyframes sheet-in {
+    from { opacity: 0; transform: translateY(22px) scale(0.94); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  @keyframes title-in {
+    from { opacity: 0; transform: translateY(26px); filter: blur(6px); }
+    to   { opacity: 1; transform: translateY(0); filter: blur(0); }
+  }
+
+  /* ---------- In-game HUD ---------- */
+  .hud { position: fixed; z-index: 10; animation: float-in .5s cubic-bezier(.2,.8,.25,1) both; }
+  #topbar {
+    top: 16px; left: 16px; right: 16px;
+    display: flex; align-items: center; gap: 14px;
+    pointer-events: none;
+  }
+  #topbar > * { pointer-events: auto; }
+  .brand {
+    display: flex; align-items: center; gap: 11px;
+    font-weight: 800; font-size: 16.5px; letter-spacing: .2px;
+    padding: 9px 18px 9px 10px; border-radius: 999px;
+  }
+  .brand .logo {
+    width: 32px; height: 32px; border-radius: 10px;
+    background: linear-gradient(145deg, #6ea0ff, #4f5bff 60%, #7a5bff);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 4px 12px rgba(79,107,255,.5);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; font-weight: 900; color: #fff;
+  }
+  #turn-pill {
+    display: flex; align-items: center; gap: 9px;
+    padding: 10px 18px; border-radius: 999px;
+    font-weight: 650; font-size: 13.5px;
+  }
+  #turn-pill .dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    box-shadow: 0 0 10px currentColor;
+  }
+  #hint {
+    margin-left: auto; color: var(--muted); font-size: 12px; font-weight: 500;
+    padding: 9px 16px; border-radius: 999px;
+  }
+  #pause-btn { padding: 10px 20px; border-radius: 999px; font-size: 13px; }
+
+  #sidebar {
+    top: 80px; right: 16px; width: 304px;
+    display: flex; flex-direction: column; gap: 14px;
+    max-height: calc(100vh - 180px);
+    animation-delay: .08s;
+  }
+  .panel { border-radius: var(--r-lg); padding: 16px 18px; }
+  .panel h3 {
+    font-size: 10.5px; font-weight: 800; letter-spacing: 1.6px;
+    text-transform: uppercase; color: var(--muted); margin-bottom: 12px;
+  }
+  .pcard {
+    display: flex; flex-direction: column; gap: 7px;
+    padding: 11px 12px; margin-bottom: 9px;
+    border-radius: var(--r-md);
+    background: linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.01));
+    border: 1px solid rgba(255,255,255,0.07);
+    transition: all .2s;
+  }
+  .pcard:last-child { margin-bottom: 0; }
+  .pcard.current {
+    border-color: rgba(122,160,255,0.55);
+    background: linear-gradient(160deg, rgba(95,135,255,0.16), rgba(95,135,255,0.05));
+    box-shadow: 0 0 0 1px rgba(122,160,255,0.25), 0 8px 24px rgba(79,139,255,0.18);
+  }
+  .pcard.dead { opacity: .35; }
+  .pcard .prow { display: flex; align-items: center; gap: 10px; }
+  .avatar {
+    width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 800; color: #fff;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.45), 0 3px 10px rgba(0,0,0,.4);
+  }
+  .pcard .pname { font-weight: 650; font-size: 13.5px; flex: 1; display: flex; align-items: center; gap: 7px; }
+  .pcard.dead .pname { text-decoration: line-through; }
+  .tag {
+    font-size: 9px; font-weight: 800; letter-spacing: .8px;
+    padding: 2.5px 7px; border-radius: 6px;
+    background: rgba(255,107,107,.18); color: var(--red);
+    border: 1px solid rgba(255,107,107,.35);
+  }
+  .tag.gold {
+    background: rgba(255,209,102,.15); color: var(--gold);
+    border-color: rgba(255,209,102,.4);
+  }
+  .pcard .cash { font-weight: 750; font-size: 13.5px; color: var(--green); font-variant-numeric: tabular-nums; }
+
+  /* ---------- Drawn card ---------- */
+  .card-stage { perspective: 900px; margin-bottom: 4px; }
+  .draw-card {
+    border-radius: 18px; overflow: hidden;
+    border: 1px solid rgba(255,255,255,.14);
+    box-shadow: 0 16px 44px rgba(0,0,0,.5);
+    animation: card-flip .55s cubic-bezier(.2,.8,.25,1) both;
+  }
+  @keyframes card-flip {
+    0%   { transform: rotateY(95deg) scale(.92); opacity: 0; }
+    100% { transform: rotateY(0deg) scale(1); opacity: 1; }
+  }
+  .draw-card .dc-head {
+    padding: 13px; text-align: center;
+    font-weight: 900; letter-spacing: 3.5px; font-size: 12px;
+    text-transform: uppercase; color: #fff;
+    text-shadow: 0 1px 3px rgba(0,0,0,.4);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.3);
+  }
+  .draw-card.trending .dc-head { background: linear-gradient(135deg, #ff7a3d, #e6253a); }
+  .draw-card.earnings .dc-head { background: linear-gradient(135deg, #8b97ad, #46536b); }
+  .draw-card .dc-body { padding: 24px 22px 26px; background: rgba(255,255,255,.05); text-align: center; }
+  .draw-card .dc-glyph {
+    width: 52px; height: 52px; margin: 0 auto 14px;
+    border-radius: 16px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 26px; font-weight: 900; color: #fff;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.4), 0 6px 18px rgba(0,0,0,.35);
+  }
+  .draw-card.trending .dc-glyph { background: linear-gradient(160deg, #ff7a3d, #e6253a); }
+  .draw-card.earnings .dc-glyph { background: linear-gradient(160deg, #8b97ad, #46536b); }
+  .draw-card .dc-text { font-size: 14.5px; line-height: 1.6; color: var(--text); font-weight: 550; }
+
+  /* ---------- Money popups ---------- */
+  .money-pop {
+    position: fixed; z-index: 30;
+    font-weight: 800; font-size: 19px;
+    pointer-events: none;
+    text-shadow: 0 2px 10px rgba(0,0,0,.7);
+    animation: money-rise 1.15s ease-out forwards;
+  }
+  @keyframes money-rise {
+    0%   { opacity: 0; transform: translate(-50%, 0) scale(.8); }
+    15%  { opacity: 1; transform: translate(-50%, -12px) scale(1.08); }
+    100% { opacity: 0; transform: translate(-50%, -52px) scale(1); }
+  }
+
+  /* ---------- Trade ---------- */
+  .trade-cols { display: flex; gap: 14px; margin-top: 12px; }
+  .trade-col { flex: 1; min-width: 0; }
+  .trade-col h4 {
+    font-size: 10px; font-weight: 800; letter-spacing: 1.3px;
+    text-transform: uppercase; color: var(--muted); margin-bottom: 9px;
+  }
+  .trade-chip {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 10px; margin-bottom: 6px;
+    border-radius: 11px;
+    border: 1px solid rgba(255,255,255,.08);
+    background: rgba(255,255,255,.03);
+    cursor: pointer; font-size: 12.5px; font-weight: 600;
+    transition: all .15s;
+  }
+  .trade-chip .chip { flex-shrink: 0; }
+  .trade-chip.on {
+    border-color: rgba(110,160,255,.65);
+    background: rgba(95,135,255,.16);
+    box-shadow: 0 0 0 1px rgba(110,160,255,.3);
+  }
+  .trade-cash {
+    width: 100%; margin-top: 4px;
+    padding: 9px 12px; border-radius: 10px;
+    border: 1px solid rgba(255,255,255,.1);
+    background: rgba(0,0,0,.25);
+    color: var(--text); font-family: inherit; font-size: 13px;
+    outline: none;
+  }
+  .trade-cash:focus { border-color: rgba(110,160,255,.6); }
+
+  /* ---------- Auction ---------- */
+  .auction-state { text-align: center; font-size: 16px; font-weight: 750; margin: 12px 0 2px; }
+  .auction-state small { display: block; font-size: 12px; color: var(--muted); font-weight: 550; margin-top: 4px; }
+
+  /* ---------- Mortgage / setup rows ---------- */
+  .manage-row.mort .mname { opacity: .55; }
+  .manage-row .mort-btn {
+    background: linear-gradient(180deg, rgba(110,160,255,.38), rgba(110,160,255,.16));
+    border: 1px solid rgba(110,160,255,.4); color: #cfe0ff;
+  }
+  .player-row { display: flex; gap: 8px; align-items: center; margin-bottom: 9px; }
+  .player-row input { margin: 0 !important; flex: 1; }
+  .seg.mini { padding: 4px; width: 158px; flex-shrink: 0; }
+  .seg.mini button { padding: 8px 4px; font-size: 12px; }
+  .prop-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+  .chip {
+    width: 14px; height: 14px; border-radius: 4.5px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.35), 0 1px 3px rgba(0,0,0,.5);
+  }
+  #log { max-height: 195px; overflow-y: auto; font-size: 12px; line-height: 1.65; color: var(--muted); font-weight: 500; }
+  #log::-webkit-scrollbar { width: 5px; }
+  #log::-webkit-scrollbar-thumb { background: rgba(255,255,255,.14); border-radius: 3px; }
+  #log .important { color: var(--gold); font-weight: 650; }
+
+  #actionbar {
+    bottom: 22px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 10px; align-items: center;
+    padding: 12px; border-radius: 26px;
+    animation-delay: .14s;
+  }
+  #center-msg {
+    bottom: 100px; left: 50%; transform: translateX(-50%);
+    font-size: 13.5px; font-weight: 550;
+    border-radius: 999px; padding: 9px 20px;
+    max-width: 70vw; text-align: center;
+    transition: opacity .25s;
+  }
+  #center-msg:empty { opacity: 0; }
+
+  .btn {
+    font-family: inherit; font-size: 14px; font-weight: 650;
+    padding: 12px 24px; border-radius: 15px;
+    border: 1px solid rgba(255,255,255,0.12);
+    background: linear-gradient(160deg, rgba(255,255,255,0.10), rgba(255,255,255,0.03));
+    color: var(--text);
+    cursor: pointer;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.18), 0 4px 14px rgba(0,0,0,.3);
+    transition: all .18s cubic-bezier(.2,.8,.25,1);
+  }
+  .btn:hover:not(:disabled) {
+    transform: translateY(-2px);
+    background: linear-gradient(160deg, rgba(255,255,255,0.16), rgba(255,255,255,0.06));
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.22), 0 10px 26px rgba(0,0,0,.4);
+  }
+  .btn:active:not(:disabled) { transform: translateY(0) scale(.98); }
+  .btn:disabled { opacity: .32; cursor: default; }
+  .btn-primary {
+    background: linear-gradient(180deg, #6ea0ff 0%, #4670ff 55%, #4154f0 100%);
+    border-color: rgba(255,255,255,0.25);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.55), inset 0 -2px 6px rgba(0,0,30,.25), 0 10px 28px rgba(70,112,255,.45);
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: linear-gradient(180deg, #7caaff 0%, #547dff 55%, #4e61ff 100%);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.6), 0 14px 34px rgba(70,112,255,.55);
+  }
+  .btn-danger {
+    background: linear-gradient(180deg, rgba(255,107,107,.25), rgba(255,107,107,.12));
+    border-color: rgba(255,107,107,.4); color: #ffb4b4;
+  }
+
+  /* ---------- Modal ---------- */
+  #overlay {
+    position: fixed; inset: 0; z-index: 40;
+    background: rgba(4,6,10,.55);
+    backdrop-filter: blur(10px) saturate(1.3);
+    -webkit-backdrop-filter: blur(10px) saturate(1.3);
+    display: none; align-items: center; justify-content: center;
+  }
+  #modal {
+    border-radius: 26px;
+    padding: 28px;
+    width: 450px; max-width: 94vw; max-height: 82vh; overflow-y: auto;
+    animation: sheet-in .35s cubic-bezier(.2,.8,.25,1) both;
+  }
+  #modal h2 { font-size: 19px; font-weight: 750; margin-bottom: 12px; letter-spacing: -.2px; }
+  #modal .body { font-size: 14px; color: #c8cfdf; line-height: 1.6; margin-bottom: 22px; }
+  #modal .body:empty { display: none; }
+  #modal .btn-row { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
+
+  .deed {
+    border-radius: 18px; overflow: hidden;
+    border: 1px solid rgba(255,255,255,.12);
+    box-shadow: 0 12px 32px rgba(0,0,0,.4);
+    margin-bottom: 16px;
+  }
+  .deed-head {
+    padding: 16px; text-align: center; color: #fff;
+    text-shadow: 0 1px 4px rgba(0,0,0,.45);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.3);
+  }
+  .deed-head b { font-size: 17px; display: block; font-weight: 800; }
+  .deed-head small { opacity: .9; font-weight: 550; }
+  .deed-body { padding: 13px 18px; background: rgba(255,255,255,.04); font-size: 13px; }
+  .deed-body div { display: flex; justify-content: space-between; padding: 4px 0; }
+  .deed-body div span:first-child { color: var(--muted); }
+
+  .manage-row {
+    display: flex; align-items: center; gap: 11px;
+    padding: 10px 4px; border-bottom: 1px solid rgba(255,255,255,.06);
+    font-size: 13.5px;
+  }
+  .manage-row .chip { flex-shrink: 0; }
+  .manage-row .mname { flex: 1; font-weight: 550; }
+  .manage-row button {
+    font-family: inherit; padding: 6px 13px; border-radius: 10px; border: 1px solid transparent;
+    cursor: pointer; font-size: 12px; font-weight: 700; color: #fff;
+    transition: all .15s;
+  }
+  .manage-row .up {
+    background: linear-gradient(180deg, #3ddf9a, #18a865);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.4), 0 4px 12px rgba(48,209,140,.35);
+  }
+  .manage-row .sell {
+    background: linear-gradient(180deg, rgba(255,107,107,.4), rgba(255,107,107,.2));
+    border-color: rgba(255,107,107,.4); color: #ffc2c2;
+  }
+  .manage-row button:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.1); }
+  .manage-row button:disabled { opacity: .22; cursor: default; }
+
+  /* ---------- Menu screens ---------- */
+  .screen {
+    position: fixed; inset: 0; z-index: 60;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .vignette {
+    position: absolute; inset: 0; pointer-events: none;
+    background:
+      radial-gradient(1200px 800px at 50% 42%, transparent 30%, rgba(6,8,13,.78) 100%),
+      linear-gradient(180deg, rgba(6,8,13,.55), transparent 28%, transparent 65%, rgba(6,8,13,.7));
+  }
+  .title-content {
+    position: relative; text-align: center;
+    display: flex; flex-direction: column; align-items: center;
+    animation: title-in .9s cubic-bezier(.2,.8,.25,1) both;
+  }
+  .logo-xl {
+    width: 88px; height: 88px; border-radius: 26px;
+    background: linear-gradient(145deg, #6ea0ff, #4f5bff 60%, #7a5bff);
+    box-shadow: inset 0 2px 0 rgba(255,255,255,.55), 0 20px 50px rgba(79,107,255,.5);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 42px; font-weight: 900; color: #fff;
+    margin-bottom: 26px;
+  }
+  .wordmark {
+    font-size: 58px; font-weight: 900; letter-spacing: 8px;
+    line-height: 1;
+    background: linear-gradient(180deg, #ffffff 25%, #aab8e8 75%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    filter: drop-shadow(0 8px 30px rgba(79,139,255,.35));
+  }
+  .title-tagline {
+    color: var(--muted); font-size: 15px; font-weight: 550;
+    letter-spacing: 2.5px; text-transform: uppercase;
+    margin: 16px 0 40px;
+  }
+  .menu-buttons { display: flex; flex-direction: column; gap: 12px; width: 280px; }
+  .menu-btn { width: 100%; padding: 15px; font-size: 15px; border-radius: 16px; }
+  .menu-btn.big { font-size: 17px; padding: 17px; }
+  .title-footer {
+    position: absolute; bottom: -90px; left: 50%; transform: translateX(-50%);
+    color: rgba(152,162,184,.6); font-size: 11.5px; font-weight: 550;
+    letter-spacing: 1px; white-space: nowrap;
+  }
+
+  .menu-card {
+    position: relative;
+    width: 480px; max-width: 92vw; max-height: 86vh; overflow-y: auto;
+    border-radius: 30px; padding: 36px;
+    animation: sheet-in .45s cubic-bezier(.2,.8,.25,1) both;
+  }
+  .menu-card h1 { font-size: 24px; font-weight: 850; letter-spacing: -.3px; margin-bottom: 6px; }
+  .menu-card .sub { color: var(--muted); font-size: 13.5px; margin-bottom: 22px; line-height: 1.5; }
+  .card-btns { display: flex; gap: 10px; margin-top: 26px; }
+  .card-btns .btn { flex: 1; padding: 14px; border-radius: 15px; }
+
+  .field-label {
+    font-size: 11px; font-weight: 750; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 1.4px; margin: 18px 0 9px;
+  }
+  .seg {
+    display: flex; gap: 6px;
+    background: rgba(0,0,0,.25);
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 14px; padding: 5px;
+    box-shadow: inset 0 2px 6px rgba(0,0,0,.35);
+  }
+  .seg button {
+    flex: 1; padding: 10px 4px; font-family: inherit; font-size: 13.5px; font-weight: 700;
+    border: none; border-radius: 10px; background: transparent; color: var(--muted); cursor: pointer;
+    transition: all .18s;
+  }
+  .seg button.on {
+    background: linear-gradient(180deg, #6ea0ff, #4670ff);
+    color: #fff;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 4px 14px rgba(70,112,255,.45);
+  }
+  #name-inputs input {
+    width: 100%; margin-bottom: 9px;
+    padding: 12px 15px; border-radius: 13px;
+    border: 1px solid rgba(255,255,255,.1);
+    background: rgba(0,0,0,.25);
+    box-shadow: inset 0 2px 6px rgba(0,0,0,.3);
+    color: var(--text); font-family: inherit; font-size: 14px; font-weight: 500;
+    outline: none; transition: all .18s;
+  }
+  #name-inputs input:focus { border-color: rgba(110,160,255,.6); box-shadow: inset 0 2px 6px rgba(0,0,0,.3), 0 0 0 3px rgba(79,139,255,.18); }
+
+  .opt-note { font-size: 12px; color: var(--muted); margin-top: 14px; line-height: 1.5; }
+
+  /* ---------- Victory screen ---------- */
+  .win-banner {
+    font-size: 11px; font-weight: 900; letter-spacing: 5px;
+    text-transform: uppercase; color: var(--gold); margin-bottom: 8px;
+  }
+  .standing-row {
+    display: flex; align-items: center; gap: 11px;
+    padding: 13px 14px; margin-bottom: 9px;
+    border-radius: 15px;
+    background: linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.01));
+    border: 1px solid rgba(255,255,255,0.07);
+  }
+  .standing-row.winner {
+    border-color: rgba(255,209,102,0.5);
+    background: linear-gradient(160deg, rgba(255,209,102,0.13), rgba(255,209,102,0.03));
+    box-shadow: 0 0 0 1px rgba(255,209,102,0.2), 0 8px 24px rgba(255,209,102,0.12);
+  }
+  .standing-row .sname { font-weight: 700; font-size: 14px; }
+  .standing-row .sstatus { font-size: 10px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; }
+  .standing-row.winner .sstatus { color: var(--gold); }
+  .standing-row:not(.winner) .sstatus { color: var(--red); }
+  .standing-stats { display: flex; gap: 18px; margin-left: auto; text-align: right; }
+  .stat { display: flex; flex-direction: column; gap: 1px; }
+  .stat .v { font-weight: 750; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+  .stat .k { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: .8px; }
+  .howto { font-size: 13.5px; color: #c8cfdf; line-height: 1.7; }
+  .howto b { color: var(--text); }
+  .howto .rule { display: flex; gap: 12px; margin-bottom: 12px; }
+  .howto .rule .n {
+    flex-shrink: 0; width: 24px; height: 24px; border-radius: 8px;
+    background: linear-gradient(145deg, #6ea0ff, #7a5bff);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 800; color: #fff;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.4);
+  }
+</style>
+</head>
+<body>
+
+<div id="scene"></div>
+
+<!-- ============ In-game HUD (hidden until a game starts) ============ -->
+<div class="hud hidden" id="topbar">
+  <div class="brand glass"><div class="logo">C</div>Companyopoly</div>
+  <div id="turn-pill" class="glass"></div>
+  <div id="hint" class="glass">Drag to rotate · Scroll to zoom</div>
+  <button class="btn glass" id="pause-btn">Menu</button>
+</div>
+
+<div class="hud hidden" id="sidebar">
+  <div class="panel glass"><h3>Players</h3><div id="players-list"></div></div>
+  <div class="panel glass"><h3>Activity</h3><div id="log"></div></div>
+</div>
+
+<div class="hud glass hidden" id="center-msg"></div>
+<div class="hud glass hidden" id="actionbar">
+  <button class="btn btn-primary" id="roll-btn">Roll Dice</button>
+  <button class="btn" id="manage-btn">Portfolio</button>
+  <button class="btn" id="trade-btn">Trade</button>
+  <button class="btn" id="end-btn">End Turn</button>
+</div>
+
+<div id="overlay"><div id="modal" class="glass"></div></div>
+
+<!-- ============ Title screen ============ -->
+<div class="screen" id="title-screen">
+  <div class="vignette"></div>
+  <div class="title-content">
+    <div class="logo-xl">C</div>
+    <h1 class="wordmark">COMPANYOPOLY</h1>
+    <p class="title-tagline">The market is the board</p>
+    <div class="menu-buttons">
+      <button class="btn btn-primary menu-btn big hidden" id="btn-continue">Continue</button>
+      <button class="btn btn-primary menu-btn big" id="btn-play">Play</button>
+      <button class="btn glass menu-btn" id="btn-options">Options</button>
+      <button class="btn glass menu-btn" id="btn-howto">How to Play</button>
+    </div>
+    <div class="title-footer">v1.0 · Local pass-and-play · 2–4 players</div>
+  </div>
+</div>
+
+<!-- ============ New game ============ -->
+<div class="screen hidden" id="setup-screen">
+  <div class="vignette"></div>
+  <div class="menu-card glass">
+    <h1>New Game</h1>
+    <p class="sub">Everyone plays on this device, passing the turn around.</p>
+    <div class="field-label">Players</div>
+    <div class="seg" id="seg-players">
+      <button data-n="2" class="on">2</button><button data-n="3">3</button><button data-n="4">4</button>
+    </div>
+    <div class="field-label">Names</div>
+    <div id="name-inputs"></div>
+    <div class="card-btns">
+      <button class="btn" id="setup-back">Back</button>
+      <button class="btn btn-primary" id="start-btn">Start Game</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ Options ============ -->
+<div class="screen hidden" id="options-screen">
+  <div class="vignette"></div>
+  <div class="menu-card glass">
+    <h1>Options</h1>
+    <p class="sub">Saved automatically on this device.</p>
+    <div id="options-body"></div>
+    <p class="opt-note">Money settings apply when a new game starts. Animation and sound apply immediately.</p>
+    <div class="card-btns">
+      <button class="btn btn-primary" id="options-back">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ How to play ============ -->
+<div class="screen hidden" id="howto-screen">
+  <div class="vignette"></div>
+  <div class="menu-card glass">
+    <h1>How to Play</h1>
+    <p class="sub">Classic property-trading rules, modern companies.</p>
+    <div class="howto">
+      <div class="rule"><div class="n">1</div><div><b>Roll and move.</b> Roll two dice and walk the board. Doubles roll again — but three doubles in a row lands you in SEC Detention.</div></div>
+      <div class="rule"><div class="n">2</div><div><b>Buy companies.</b> Land on an unowned company and you can buy it. Own every company in a sector and rents double.</div></div>
+      <div class="rule"><div class="n">3</div><div><b>Build it up.</b> Open your Portfolio to build offices on full sectors (up to 4 levels — the 4th is the golden HQ). Rent grows fast.</div></div>
+      <div class="rule"><div class="n">4</div><div><b>Collect rent.</b> Other players landing on your companies pay you. Logistics companies and cloud services have their own rent rules.</div></div>
+      <div class="rule"><div class="n">5</div><div><b>Survive.</b> Pass IPO DAY for a salary. If you can't pay a debt, sell assets — or go bankrupt. Last player standing wins.</div></div>
+    </div>
+    <div class="card-btns">
+      <button class="btn btn-primary" id="howto-back">Back</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ Victory screen ============ -->
+<div class="screen hidden" id="gameover-screen">
+  <div class="vignette"></div>
+  <div class="menu-card glass" style="width:540px">
+    <div class="win-banner">Victory</div>
+    <h1 id="win-title"></h1>
+    <p class="sub" id="win-sub"></p>
+    <div id="standings"></div>
+    <div class="card-btns">
+      <button class="btn btn-primary" id="gameover-btn">Back to Title</button>
+    </div>
+  </div>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+/* ====================== SETTINGS ====================== */
+
+const DEFAULT_SETTINGS = {
+  startingCash: 1500,
+  goSalary: 200,
+  jailFine: 50,
+  animSpeed: 'normal',   // 'normal' | 'fast'
+  sound: true,
+  music: true,
+  cameraFollow: true,
+};
+let settings = { ...DEFAULT_SETTINGS };
+try { settings = { ...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem('copoly-settings') || '{}') }; } catch (e) {}
+function saveSettings() {
+  try { localStorage.setItem('copoly-settings', JSON.stringify(settings)); } catch (e) {}
+}
+const stepMs = () => settings.animSpeed === 'fast' ? 90 : 210;
+const diceMs = () => settings.animSpeed === 'fast' ? 550 : 1100;
+
+/* ====================== SOUND (synthesized, no assets) ====================== */
+
+let audioCtx = null;
+function tone(freq, dur, type = 'sine', vol = 0.15, when = 0, slideTo = null) {
+  const t0 = audioCtx.currentTime + when;
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.type = type;
+  o.frequency.setValueAtTime(freq, t0);
+  if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t0 + dur);
+  g.gain.setValueAtTime(vol, t0);
+  g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+  o.connect(g).connect(audioCtx.destination);
+  o.start(t0);
+  o.stop(t0 + dur + 0.05);
+}
+function sfx(name) {
+  if (!settings.sound) return;
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    switch (name) {
+      case 'click': tone(660, 0.06, 'triangle', 0.1); break;
+      case 'step': tone(420, 0.045, 'sine', 0.06); break;
+      case 'dice': for (let i = 0; i < 6; i++) tone(180 + Math.random() * 320, 0.05, 'square', 0.05, i * 0.07); break;
+      case 'cash': tone(880, 0.09, 'sine', 0.13); tone(1318, 0.13, 'sine', 0.13, 0.08); break;
+      case 'buy': tone(523, 0.12, 'triangle', 0.13); tone(659, 0.12, 'triangle', 0.13, 0.07); tone(784, 0.2, 'triangle', 0.13, 0.14); break;
+      case 'pay': tone(240, 0.2, 'sawtooth', 0.07, 0, 150); break;
+      case 'jail': tone(392, 0.16, 'square', 0.09); tone(294, 0.24, 'square', 0.09, 0.14); break;
+      case 'card': tone(320, 0.16, 'sine', 0.09, 0, 900); break;
+      case 'win': [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, 0.28, 'triangle', 0.13, i * 0.12)); break;
+    }
+  } catch (e) { /* audio unavailable */ }
+}
+document.addEventListener('click', e => {
+  if (e.target.closest('.btn, .seg button, .manage-row button')) sfx('click');
+  // browsers require a user gesture before audio can start
+  if (settings.music && !musicTimer) startMusic();
+});
+
+/* ====================== MUSIC (synthesized lo-fi loop) ====================== */
+
+const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
+// Am7 → Fmaj7 → Cmaj7 → G : [bass midi, chord midis]
+const PROGRESSION = [
+  [45, [57, 60, 64, 67]],
+  [41, [53, 57, 60, 65]],
+  [48, [55, 60, 64, 67]],
+  [43, [55, 59, 62, 67]],
+];
+const MELODY_SCALE = [81, 84, 86, 88, 91]; // A minor pentatonic, high register
+const BAR_LEN = 2.4;
+let musicTimer = null, musicGain = null, musicNextBar = 0, musicBarIdx = 0;
+
+function mtone(freq, t0, dur, type, vol) {
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.type = type;
+  o.frequency.value = freq;
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.linearRampToValueAtTime(vol, t0 + 0.09);
+  g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+  o.connect(g).connect(musicGain);
+  o.start(t0);
+  o.stop(t0 + dur + 0.1);
+}
+
+function scheduleBar(t, barIdx) {
+  const [bass, chord] = PROGRESSION[barIdx % PROGRESSION.length];
+  mtone(mtof(bass), t, BAR_LEN * 0.95, 'sine', 0.05);
+  chord.forEach((m, i) => mtone(mtof(m), t + 0.03 * i, BAR_LEN * 0.92, 'triangle', 0.016));
+  if (Math.random() < 0.65) {
+    const n = MELODY_SCALE[Math.floor(Math.random() * MELODY_SCALE.length)];
+    mtone(mtof(n), t + 1.0 + Math.random() * 0.9, 0.55, 'sine', 0.026);
+  }
+  // soft offbeat ticks
+  mtone(5200, t + BAR_LEN * 0.25, 0.025, 'square', 0.005);
+  mtone(5200, t + BAR_LEN * 0.75, 0.025, 'square', 0.005);
+}
+
+function musicLoop() {
+  // schedule a few seconds ahead so background-tab timer throttling can't cause gaps
+  while (musicNextBar < audioCtx.currentTime + 5) {
+    scheduleBar(musicNextBar, musicBarIdx++);
+    musicNextBar += BAR_LEN;
+  }
+}
+
+function startMusic() {
+  if (musicTimer || !settings.music) return;
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    musicGain = audioCtx.createGain();
+    musicGain.gain.value = 1;
+    musicGain.connect(audioCtx.destination);
+    musicNextBar = audioCtx.currentTime + 0.15;
+    musicBarIdx = 0;
+    musicLoop();
+    musicTimer = setInterval(musicLoop, 1000);
+  } catch (e) { /* audio unavailable */ }
+}
+
+function stopMusic() {
+  if (musicTimer) clearInterval(musicTimer);
+  musicTimer = null;
+  if (musicGain) { try { musicGain.disconnect(); } catch (e) {} }
+  musicGain = null;
+}
+
+/* ====================== GAME DATA ====================== */
+
+const SECTORS = {
+  meme:      { label: 'Meme Stocks',  color: '#8d5524', upg: 50  },
+  social:    { label: 'Social Media', color: '#3db8d8', upg: 50  },
+  gig:       { label: 'Gig Economy',  color: '#e85fa8', upg: 100 },
+  streaming: { label: 'Streaming',    color: '#f2933a', upg: 100 },
+  food:      { label: 'Food & Drink', color: '#d93a3a', upg: 150 },
+  fintech:   { label: 'Fintech',      color: '#e6c229', upg: 150 },
+  bigtech:   { label: 'Big Tech',     color: '#2f9e44', upg: 200 },
+  ai:        { label: 'AI Giants',    color: '#1f4fd8', upg: 200 },
+};
+
+// badge: [topColor, bottomColor, glyph, glyphColor?]
+// logo: simple-icons slugs to try in order; domain: favicon-service fallback
+const SPACES = [
+  { type:'go',      name:'IPO DAY',          badge:['#3ddf9a','#0d9466','GO'] },
+  { type:'prop',    name:'GameStop',         badge:['#ff3b30','#8e1d12','GS'],  logo:['gamestop'], domain:'gamestop.com', sector:'meme', price:60, rent:4 },
+  { type:'chest',   name:'Earnings',         badge:['#8b97ad','#46536b','%'] },
+  { type:'prop',    name:'AMC Theatres',     badge:['#e23636','#7a1414','amc'], logo:['amctheatres','amc'], domain:'amctheatres.com', sector:'meme', price:60, rent:4 },
+  { type:'tax',     name:'Capital Gains',    badge:['#697a94','#36415a','$'],   amount:200 },
+  { type:'logi',    name:'FedEx',            badge:['#7c3aed','#4316a8','F'],   logo:['fedex'], domain:'fedex.com', price:200 },
+  { type:'prop',    name:'Snapchat',         badge:['#fff700','#e0c500','S','#1a1a1a'], logo:['snapchat'], domain:'snapchat.com', sector:'social', price:100, rent:6 },
+  { type:'chance',  name:'Trending',         badge:['#ff7a3d','#e6253a','↑'] },
+  { type:'prop',    name:'Reddit',           badge:['#ff4500','#b33000','R'],   logo:['reddit'], domain:'reddit.com', sector:'social', price:100, rent:6 },
+  { type:'prop',    name:'TikTok',           badge:['#1d1d1f','#000000','T'],   logo:['tiktok'], domain:'tiktok.com', sector:'social', price:120, rent:8 },
+  { type:'jail',    name:'SEC DETENTION',    badge:['#5a6578','#222b3d','SEC'] },
+  { type:'prop',    name:'Uber',             badge:['#2b2b2e','#0a0a0c','U'],   logo:['uber'], domain:'uber.com', sector:'gig', price:140, rent:10 },
+  { type:'cloud',   name:'AWS Cloud',        badge:['#2a3950','#16202f','AWS','#ff9900'], logo:['amazonwebservices','amazonaws'], domain:'aws.amazon.com', price:150 },
+  { type:'prop',    name:'Lyft',             badge:['#ff00bf','#a8007e','L'],   logo:['lyft'], domain:'lyft.com', sector:'gig', price:140, rent:10 },
+  { type:'prop',    name:'Airbnb',           badge:['#ff5a5f','#c81d23','A'],   logo:['airbnb'], domain:'airbnb.com', sector:'gig', price:160, rent:12 },
+  { type:'logi',    name:'UPS',              badge:['#644117','#33200c','U','#ffb500'], logo:['ups'], domain:'ups.com', price:200 },
+  { type:'prop',    name:'Spotify',          badge:['#1ed760','#0e7a34','S'],   logo:['spotify'], domain:'spotify.com', sector:'streaming', price:180, rent:14 },
+  { type:'chest',   name:'Earnings',         badge:['#8b97ad','#46536b','%'] },
+  { type:'prop',    name:'Twitch',           badge:['#9146ff','#5c2db3','T'],   logo:['twitch'], domain:'twitch.tv', sector:'streaming', price:180, rent:14 },
+  { type:'prop',    name:'Netflix',          badge:['#1d1d1f','#000000','N','#e50914'], logo:['netflix'], domain:'netflix.com', sector:'streaming', price:200, rent:16 },
+  { type:'parking', name:'WEWORK LOUNGE',    badge:['#4f8bff','#2450c4','W'] },
+  { type:'prop',    name:'Starbucks',        badge:['#008a5c','#00543a','S'],   logo:['starbucks'], domain:'starbucks.com', sector:'food', price:220, rent:18 },
+  { type:'chance',  name:'Trending',         badge:['#ff7a3d','#e6253a','↑'] },
+  { type:'prop',    name:'Chipotle',         badge:['#a81612','#5e0b08','C'],   logo:['chipotle'], domain:'chipotle.com', sector:'food', price:220, rent:18 },
+  { type:'prop',    name:"McDonald's",       badge:['#ffc72c','#da291c','M'],   logo:['mcdonalds'], domain:'mcdonalds.com', sector:'food', price:240, rent:20 },
+  { type:'logi',    name:'DoorDash',         badge:['#ff3008','#b32006','D'],   logo:['doordash'], domain:'doordash.com', price:200 },
+  { type:'prop',    name:'Robinhood',        badge:['#00c805','#007a03','R'],   logo:['robinhood'], domain:'robinhood.com', sector:'fintech', price:260, rent:22 },
+  { type:'prop',    name:'Coinbase',         badge:['#0052ff','#0034a3','C'],   logo:['coinbase'], domain:'coinbase.com', sector:'fintech', price:260, rent:22 },
+  { type:'cloud',   name:'Starlink',         badge:['#3c4a63','#171e2c','S','#cfd8e8'], logo:['starlink','spacex'], domain:'starlink.com', price:150 },
+  { type:'prop',    name:'Stripe',           badge:['#635bff','#3e37b3','S'],   logo:['stripe'], domain:'stripe.com', sector:'fintech', price:280, rent:24 },
+  { type:'gotojail',name:'INSIDER TRADING',  badge:['#ff5252','#8e1414','!'] },
+  { type:'prop',    name:'Meta',             badge:['#0866ff','#0044b3','M'],   logo:['meta'], domain:'meta.com', sector:'bigtech', price:300, rent:26 },
+  { type:'prop',    name:'Amazon',           badge:['#37475a','#131a22','a','#ff9900'], logo:['amazon'], domain:'amazon.com', sector:'bigtech', price:300, rent:26 },
+  { type:'chest',   name:'Earnings',         badge:['#8b97ad','#46536b','%'] },
+  { type:'prop',    name:'Google',           badge:['#4285f4','#1a56c4','G'],   logo:['google'], domain:'google.com', sector:'bigtech', price:320, rent:28 },
+  { type:'logi',    name:'Instacart',        badge:['#43b02a','#1f6e10','I'],   logo:['instacart'], domain:'instacart.com', price:200 },
+  { type:'chance',  name:'Trending',         badge:['#ff7a3d','#e6253a','↑'] },
+  { type:'prop',    name:'OpenAI',           badge:['#1b2535','#0c1018','O','#19c9a8'], logo:['openai'], domain:'openai.com', sector:'ai', price:350, rent:35 },
+  { type:'tax',     name:'Subscription Fees',badge:['#697a94','#36415a','$'],   amount:100 },
+  { type:'prop',    name:'Nvidia',           badge:['#76b900','#3f6600','N'],   logo:['nvidia'], domain:'nvidia.com', sector:'ai', price:400, rent:50 },
+];
+SPACES.forEach(sp => { if (sp.price) { sp.owner = null; sp.level = 0; } });
+
+const RENT_MULT = [1, 5, 12, 25, 45];
+const JAIL_POS = 10;
+
+const TRENDING_CARDS = [
+  { text:'Your portfolio gets featured on a viral TikTok. Collect $150.', money:150 },
+  { text:'AI hype rally! Everything you touch goes up. Collect $200.', money:200 },
+  { text:'Elon tweets about your company. Stock pops. Collect $90.', money:90 },
+  { text:'You bought the dip at the perfect time. Collect $120.', money:120 },
+  { text:'Crypto winter hits your holdings. Pay $80.', money:-80 },
+  { text:'Data breach — pay regulatory fines of $150.', money:-150 },
+  { text:'Your meme coin rug-pulls. Pay $60.', money:-60 },
+  { text:'Advance to IPO DAY and collect your salary.', goto:0 },
+  { text:'The AI bubble pulls you in. Advance to Nvidia.', goto:39 },
+  { text:'Supply chain chaos! Advance to the nearest logistics company. If it\'s owned, pay double rent.', nearest:'logi' },
+  { text:'Your stock corrects. Go back 3 spaces.', back:3 },
+  { text:'Insider trading allegations! Go directly to SEC Detention.', jail:true },
+  { text:'Your lawyer finds a loophole. Keep this Free Pass and use it to leave SEC Detention.', jailFree:true },
+  { text:'Server farm maintenance: pay $25 per office and $100 per HQ you own.', repairs:[25,100] },
+];
+const EARNINGS_CARDS = [
+  { text:'Quarterly earnings beat estimates. Collect $100.', money:100 },
+  { text:'Government subsidy approved. Collect $150.', money:150 },
+  { text:'Dividend payout lands in your account. Collect $60.', money:60 },
+  { text:'Tax refund. Collect $20.', money:20 },
+  { text:'Your side project gets acquired. Collect $130.', money:130 },
+  { text:'Mass layoffs — severance packages cost you $75.', money:-75 },
+  { text:'Antitrust fine from the FTC. Pay $120.', money:-120 },
+  { text:'Office snacks budget audit. Pay $40.', money:-40 },
+  { text:'It\'s your IPO anniversary! Every player chips in $30.', fromEach:30 },
+  { text:'You lose a patent lawsuit. Pay every player $40.', payEach:40 },
+  { text:'Office renovations: pay $40 per office and $115 per HQ you own.', repairs:[40,115] },
+  { text:'Your compliance team is that good. Keep this Free Pass and use it to leave SEC Detention.', jailFree:true },
+  { text:'Advance to IPO DAY and collect your salary.', goto:0 },
+];
+
+const TOKEN_NAMES = ['Rocket', 'Diamond', 'Bot', 'Gem'];
+const PLAYER_COLORS = ['#4f8bff', '#ff5d6c', '#30d18c', '#b07aff'];
+
+const state = {
+  players: [], turn: 0, doubles: 0, lastRoll: 0, turnCount: 0,
+  trendingDeck: [], earningsDeck: [], over: false,
+};
+
+function shuffle(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+/* ====================== 3D SCENE ====================== */
+
+const TILE_H = 0.18;
+const BOARD_TOP = 0.12 + TILE_H;
+
+let scene, camera, renderer, controls, clock;
+const tileGroups = [];
+const ownerBars = [];
+const buildingGroups = [];
+const buildingLevels = [];
+const tokenGroups = [];
+let highlightRing;
+const diceMeshes = [];
+
+function tileTransform(i) {
+  const E = j => j === 0 ? 5.3 : (j === 10 ? -5.3 : 4.0 - (j - 1));
+  if (i === 0)  return { x: 5.3,        z: 5.3,        rot: 0,            corner: true };
+  if (i === 10) return { x: -5.3,       z: 5.3,        rot: -Math.PI/2,   corner: true };
+  if (i === 20) return { x: -5.3,       z: -5.3,       rot: Math.PI,      corner: true };
+  if (i === 30) return { x: 5.3,        z: -5.3,       rot: Math.PI/2,    corner: true };
+  if (i < 10)   return { x: E(i),       z: 5.3,        rot: 0,            corner: false };
+  if (i < 20)   return { x: -5.3,       z: E(i - 10),  rot: -Math.PI/2,   corner: false };
+  if (i < 30)   return { x: (i-21) - 4, z: -5.3,       rot: Math.PI,      corner: false };
+  return        { x: 5.3,        z: (i-31) - 4, rot: Math.PI/2,    corner: false };
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+// glossy iOS-app-icon style badge
+function drawBadge(ctx, x, y, size, badge, logo) {
+  const [c1, c2, glyph, glyphColor] = badge;
+  const r = size * 0.28;
+  const grad = ctx.createLinearGradient(x, y, x, y + size);
+  grad.addColorStop(0, c1);
+  grad.addColorStop(1, c2);
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.35)';
+  ctx.shadowBlur = size * 0.12;
+  ctx.shadowOffsetY = size * 0.05;
+  roundRect(ctx, x, y, size, size, r);
+  ctx.fillStyle = grad;
+  ctx.fill();
+  ctx.restore();
+  // top gloss
+  ctx.save();
+  roundRect(ctx, x, y, size, size, r);
+  ctx.clip();
+  const gloss = ctx.createLinearGradient(x, y, x, y + size * 0.55);
+  gloss.addColorStop(0, 'rgba(255,255,255,0.38)');
+  gloss.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = gloss;
+  ctx.fillRect(x, y, size, size * 0.55);
+  ctx.restore();
+  // logo image (brand SVG or favicon) or letter glyph fallback
+  ctx.save();
+  if (logo && logo.mode === 'svg') {
+    const s = size * 0.58;
+    ctx.shadowColor = 'rgba(0,0,0,0.3)';
+    ctx.shadowBlur = 5;
+    ctx.shadowOffsetY = 2;
+    ctx.drawImage(logo.img, x + (size - s) / 2, y + (size - s) / 2, s, s);
+  } else if (logo && logo.mode === 'favicon') {
+    const card = size * 0.74;
+    roundRect(ctx, x + (size - card) / 2, y + (size - card) / 2, card, card, card * 0.24);
+    ctx.fillStyle = '#ffffff';
+    ctx.shadowColor = 'rgba(0,0,0,0.25)';
+    ctx.shadowBlur = 4;
+    ctx.fill();
+    ctx.shadowColor = 'transparent';
+    const s = size * 0.52;
+    ctx.drawImage(logo.img, x + (size - s) / 2, y + (size - s) / 2, s, s);
+  } else {
+    ctx.fillStyle = glyphColor || '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const fontSize = glyph.length > 1 ? size * 0.34 : size * 0.56;
+    ctx.font = `900 ${fontSize}px Inter, Arial`;
+    ctx.shadowColor = 'rgba(0,0,0,0.3)';
+    ctx.shadowBlur = 4;
+    ctx.shadowOffsetY = 2;
+    ctx.fillText(glyph, x + size / 2, y + size / 2 + size * 0.03);
+  }
+  ctx.restore();
+}
+
+function drawTile(ctx, W, H, sp, corner, logo) {
+  const bg = ctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, '#f7f4ec');
+  bg.addColorStop(1, '#eeeade');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = '#262b38';
+  ctx.lineWidth = 5;
+  ctx.strokeRect(0, 0, W, H);
+
+  let y = 26;
+  if (sp.type === 'prop') {
+    const band = ctx.createLinearGradient(0, 3, 0, 64);
+    band.addColorStop(0, SECTORS[sp.sector].color);
+    band.addColorStop(1, shade(SECTORS[sp.sector].color, -22));
+    ctx.fillStyle = band;
+    ctx.fillRect(3, 3, W - 6, 60);
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    ctx.fillRect(3, 3, W - 6, 16);
+    ctx.strokeStyle = '#262b38'; ctx.lineWidth = 3.5;
+    ctx.strokeRect(3, 3, W - 6, 60);
+    y = 88;
+  }
+
+  const badgeSize = corner ? 120 : 96;
+  drawBadge(ctx, (W - badgeSize) / 2, y, badgeSize, sp.badge, logo);
+  y += badgeSize + 14;
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#1c2130';
+  ctx.font = `800 ${corner ? 38 : 29}px Inter, Arial`;
+  const words = sp.name.split(' ');
+  if (!corner && ctx.measureText(sp.name).width > W - 20 && words.length > 1) {
+    ctx.fillText(words[0], W / 2, y + 26);
+    ctx.fillText(words.slice(1).join(' '), W / 2, y + 62);
+  } else {
+    ctx.fillText(sp.name, W / 2, y + 30);
+  }
+
+  if (sp.price) {
+    ctx.font = '650 27px Inter, Arial';
+    ctx.fillStyle = '#707a8e';
+    ctx.fillText('$' + sp.price, W / 2, H - 24);
+  }
+}
+
+const tileCanvases = []; // per-space {ctx, W, H, tex, corner} so logos can redraw later
+
+function makeTileTexture(sp, corner, i) {
+  const W = corner ? 410 : 256, H = 410;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const ctx = c.getContext('2d');
+  drawTile(ctx, W, H, sp, corner, null);
+  const tex = new THREE.CanvasTexture(c);
+  tex.anisotropy = 8;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tileCanvases[i] = { ctx, W, H, tex, corner };
+  return tex;
+}
+
+/* --- real brand logos, loaded async with graceful fallback --- */
+
+async function fetchSimpleIcon(slug, color) {
+  const res = await fetch(`https://cdn.jsdelivr.net/npm/simple-icons@13/icons/${slug}.svg`);
+  if (!res.ok) throw new Error('no icon');
+  let svg = await res.text();
+  svg = svg.replace('<svg ', `<svg width="256" height="256" fill="${color}" `);
+  const img = new Image();
+  img.src = 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
+  await img.decode();
+  return { img, mode: 'svg' };
+}
+
+async function fetchFavicon(domain) {
+  const img = new Image();
+  img.crossOrigin = 'anonymous'; // loads only if CORS-allowed, so canvas never taints
+  img.src = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${domain}&size=128`;
+  await img.decode();
+  return { img, mode: 'favicon' };
+}
+
+function loadLogos() {
+  SPACES.forEach(async (sp, i) => {
+    if (!sp.logo && !sp.domain) return;
+    let logo = null;
+    for (const slug of (sp.logo || [])) {
+      try { logo = await fetchSimpleIcon(slug, sp.badge[3] || '#ffffff'); break; } catch (e) { /* try next */ }
+    }
+    if (!logo && sp.domain) {
+      try { logo = await fetchFavicon(sp.domain); } catch (e) { /* keep glyph */ }
+    }
+    if (!logo) return;
+    const tc = tileCanvases[i];
+    drawTile(tc.ctx, tc.W, tc.H, sp, tc.corner, logo);
+    tc.tex.needsUpdate = true;
+  });
+}
+
+function shade(hex, pct) {
+  const n = parseInt(hex.slice(1), 16);
+  const amt = Math.round(2.55 * pct);
+  const r = Math.min(255, Math.max(0, (n >> 16) + amt));
+  const g = Math.min(255, Math.max(0, ((n >> 8) & 0xff) + amt));
+  const b = Math.min(255, Math.max(0, (n & 0xff) + amt));
+  return `rgb(${r},${g},${b})`;
+}
+
+function makeCenterTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 1024;
+  const ctx = c.getContext('2d');
+  const bg = ctx.createLinearGradient(0, 0, 1024, 1024);
+  bg.addColorStop(0, '#f0ece1');
+  bg.addColorStop(1, '#e6e1d2');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, 1024, 1024);
+  ctx.strokeStyle = 'rgba(120,115,100,0.14)';
+  ctx.lineWidth = 2.5;
+  for (let i = 86; i < 1024; i += 92) {
+    ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, 1024); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(1024, i); ctx.stroke();
+  }
+  ctx.save();
+  ctx.translate(512, 512);
+  ctx.rotate(-Math.PI / 12);
+  ctx.shadowColor = 'rgba(0,0,0,0.3)';
+  ctx.shadowBlur = 30;
+  ctx.shadowOffsetY = 12;
+  const banner = ctx.createLinearGradient(0, -92, 0, 92);
+  banner.addColorStop(0, '#e04141');
+  banner.addColorStop(0.5, '#bf2330');
+  banner.addColorStop(1, '#8e1220');
+  ctx.fillStyle = banner;
+  roundRect(ctx, -410, -92, 820, 184, 36);
+  ctx.fill();
+  ctx.shadowColor = 'transparent';
+  ctx.save();
+  roundRect(ctx, -410, -92, 820, 184, 36);
+  ctx.clip();
+  const gl = ctx.createLinearGradient(0, -92, 0, 10);
+  gl.addColorStop(0, 'rgba(255,255,255,0.32)');
+  gl.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = gl;
+  ctx.fillRect(-410, -92, 820, 102);
+  ctx.restore();
+  ctx.fillStyle = '#fff';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = '850 90px Inter, Arial';
+  ctx.shadowColor = 'rgba(0,0,0,0.35)';
+  ctx.shadowBlur = 6;
+  ctx.shadowOffsetY = 3;
+  ctx.fillText('COMPANYOPOLY', 0, 8);
+  ctx.restore();
+  const tex = new THREE.CanvasTexture(c);
+  tex.anisotropy = 8;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function makeDieFaceTexture(v) {
+  const PIPS = { 1:[4], 2:[0,8], 3:[0,4,8], 4:[0,2,6,8], 5:[0,2,4,6,8], 6:[0,2,3,5,6,8] };
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const ctx = c.getContext('2d');
+  const g = ctx.createLinearGradient(0, 0, 0, 128);
+  g.addColorStop(0, '#ffffff');
+  g.addColorStop(1, '#e8e8ec');
+  ctx.fillStyle = g;
+  roundRect(ctx, 2, 2, 124, 124, 24);
+  ctx.fill();
+  ctx.strokeStyle = '#c4c4cc'; ctx.lineWidth = 3; ctx.stroke();
+  ctx.fillStyle = '#1a1e2a';
+  for (const p of PIPS[v]) {
+    const col = p % 3, row = Math.floor(p / 3);
+    ctx.beginPath();
+    ctx.arc(32 + col * 32, 32 + row * 32, 9, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function init3D() {
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0a0c12);
+  scene.fog = new THREE.Fog(0x0a0c12, 26, 48);
+  clock = new THREE.Clock();
+
+  camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.1, 100);
+  camera.position.set(13, 9, 13);
+
+  renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  document.getElementById('scene').appendChild(renderer.domElement);
+
+  controls = new OrbitControls(camera, renderer.domElement);
+  controls.target.set(0, 0, 0);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.06;
+  controls.minDistance = 8;
+  controls.maxDistance = 30;
+  controls.maxPolarAngle = Math.PI / 2.18;
+  controls.minPolarAngle = 0.45;
+
+  scene.add(new THREE.HemisphereLight(0xcfd8ff, 0x202430, 0.85));
+  const sun = new THREE.DirectionalLight(0xfff3e0, 2.1);
+  sun.position.set(9, 16, 6);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.camera.left = -10; sun.shadow.camera.right = 10;
+  sun.shadow.camera.top = 10; sun.shadow.camera.bottom = -10;
+  sun.shadow.bias = -0.0004;
+  scene.add(sun);
+
+  const ground = new THREE.Mesh(
+    new THREE.CircleGeometry(34, 64),
+    new THREE.MeshStandardMaterial({ color: 0x0f1119, roughness: 0.95 })
+  );
+  ground.rotation.x = -Math.PI / 2;
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  const base = new THREE.Mesh(
+    new THREE.BoxGeometry(12.9, 0.24, 12.9),
+    new THREE.MeshStandardMaterial({ color: 0x1b1f2a, roughness: 0.6, metalness: 0.15 })
+  );
+  base.castShadow = true;
+  base.receiveShadow = true;
+  scene.add(base);
+
+  const center = new THREE.Mesh(
+    new THREE.PlaneGeometry(9.0, 9.0),
+    new THREE.MeshStandardMaterial({ map: makeCenterTexture(), roughness: 0.85 })
+  );
+  center.rotation.x = -Math.PI / 2;
+  center.position.y = 0.125;
+  center.receiveShadow = true;
+  scene.add(center);
+
+  const sideMat = new THREE.MeshStandardMaterial({ color: 0xd8d2bf, roughness: 0.8 });
+  SPACES.forEach((sp, i) => {
+    const t = tileTransform(i);
+    const w = t.corner ? 1.6 : 1.0, d = 1.6;
+    const topMat = new THREE.MeshStandardMaterial({ map: makeTileTexture(sp, t.corner, i), roughness: 0.75 });
+    const tile = new THREE.Mesh(new THREE.BoxGeometry(w, TILE_H, d),
+      [sideMat, sideMat, topMat, sideMat, sideMat, sideMat]);
+    tile.castShadow = true;
+    tile.receiveShadow = true;
+    tile.position.y = 0.12 + TILE_H / 2;
+
+    const g = new THREE.Group();
+    g.position.set(t.x, 0, t.z);
+    g.rotation.y = t.rot;
+    g.add(tile);
+
+    let bar = null;
+    if (sp.price) {
+      bar = new THREE.Mesh(
+        new THREE.BoxGeometry(w * 0.86, 0.07, 0.14),
+        new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4, emissiveIntensity: 0.4 })
+      );
+      bar.position.set(0, BOARD_TOP + 0.035, -d / 2 + 0.13);
+      bar.visible = false;
+      g.add(bar);
+    }
+    ownerBars.push(bar);
+
+    const bGroup = new THREE.Group();
+    bGroup.position.set(0, BOARD_TOP, -d / 2 + 0.42);
+    g.add(bGroup);
+    buildingGroups.push(bGroup);
+    buildingLevels.push(0);
+
+    scene.add(g);
+    tileGroups.push(g);
+  });
+
+  highlightRing = new THREE.Mesh(
+    new THREE.RingGeometry(0.52, 0.68, 48),
+    new THREE.MeshBasicMaterial({ color: 0xffce3a, transparent: true, opacity: 0.85, side: THREE.DoubleSide })
+  );
+  highlightRing.rotation.x = -Math.PI / 2;
+  highlightRing.position.y = BOARD_TOP + 0.012;
+  highlightRing.visible = false;
+  scene.add(highlightRing);
+
+  const faceVals = [3, 4, 1, 6, 2, 5];
+  for (let k = 0; k < 2; k++) {
+    const mats = faceVals.map(v => new THREE.MeshStandardMaterial({ map: makeDieFaceTexture(v), roughness: 0.35 }));
+    const die = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.62, 0.62), mats);
+    die.castShadow = true;
+    die.position.set(k === 0 ? -0.55 : 0.55, 0.45, 2.2);
+    die.rotation.set(0, (k ? -1 : 1) * 0.5, 0);
+    scene.add(die);
+    diceMeshes.push(die);
+  }
+
+  window.addEventListener('resize', () => {
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+  });
+
+  // clickable tiles (only when a game is running and the menu isn't covering the board)
+  const ray = new THREE.Raycaster();
+  let downXY = null;
+  renderer.domElement.addEventListener('pointerdown', e => { downXY = [e.clientX, e.clientY]; });
+  renderer.domElement.addEventListener('pointerup', e => {
+    if (!downXY || state.players.length === 0 || controls.autoRotate) return;
+    const moved = Math.hypot(e.clientX - downXY[0], e.clientY - downXY[1]);
+    downXY = null;
+    if (moved > 6 || $('overlay').style.display === 'flex') return; // was a drag, or modal open
+    ray.setFromCamera(new THREE.Vector2((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1), camera);
+    const hit = ray.intersectObjects(tileGroups, true)[0];
+    if (!hit) return;
+    let g = hit.object; while (g.parent && !tileGroups.includes(g)) g = g.parent;
+    const idx = tileGroups.indexOf(g);
+    if (idx >= 0) inspectTile(idx);
+  });
+
+  loadLogos();
+  setMenuCamera();
+  animate();
+}
+
+async function inspectTile(idx) {
+  const sp = SPACES[idx];
+  if (!sp.price) {
+    await dialog(sp.name, `<b>${sp.name}</b><br>${
+      sp.type === 'go' ? 'Collect your salary each time you pass.' :
+      sp.type === 'jail' ? 'SEC Detention. Just visiting? No charge.' :
+      sp.type === 'parking' ? 'Free space. Relax.' :
+      sp.type === 'gotojail' ? 'Land here and go straight to SEC Detention.' :
+      sp.type === 'tax' ? `Pay ${fmt(sp.amount)} when you land here.` :
+      sp.type === 'chance' ? 'Draw a Trending card — fortune or misfortune.' :
+      'Draw an Earnings Report card.'}`,
+      [{ label: 'Close', value: true, cls: '' }]);
+    return;
+  }
+  const ownerTxt = sp.owner == null ? 'Unowned — available to buy.'
+    : `Owned by <b style="color:${state.players[sp.owner].color}">${state.players[sp.owner].name}</b>${sp.mortgaged ? ' (mortgaged)' : ''}.`;
+  let body;
+  if (sp.type === 'prop') {
+    body = deedHTML(sp) + ownerTxt + (sp.owner != null && !sp.mortgaged ? `<br>Current rent: <b>${fmt(rentFor(idx))}</b>${sp.level ? ` · level ${sp.level}` : ''}.` : '');
+  } else {
+    body = `<b>${sp.name}</b> · ${fmt(sp.price)}<br>${
+      sp.type === 'logi' ? 'Logistics. Rent $25 / $50 / $100 / $200 by how many you own.' : 'Cloud service. Rent 4× dice, or 10× if you own both.'}<br><br>${ownerTxt}`;
+  }
+  await dialog('Company Info', body, [{ label: 'Close', value: true, cls: '' }]);
+}
+
+/* --- camera modes: cinematic on menus, manual in game --- */
+
+function setMenuCamera() {
+  controls.autoRotate = true;
+  controls.autoRotateSpeed = 0.5;
+  controls.enableRotate = false;
+  controls.enableZoom = false;
+  controls.enablePan = false;
+  camera.position.set(13, 9, 13);
+  controls.target.set(0, 0, 0);
+}
+
+function setGameCamera() {
+  controls.autoRotate = false;
+  controls.enableRotate = true;
+  controls.enableZoom = true;
+  controls.enablePan = false;
+  camera.position.set(11, 11.5, 11);
+  controls.target.set(0, 0, 0);
+  followActive = false;
+}
+
+/* --- tween engine (also ticked by interval so logic survives hidden tabs) --- */
+const tweens = [];
+function tween(dur, fn) {
+  return new Promise(res => tweens.push({ start: performance.now(), dur, fn, res }));
+}
+function stepTweens() {
+  const now = performance.now();
+  for (let i = tweens.length - 1; i >= 0; i--) {
+    const tw = tweens[i];
+    const k = Math.min(1, (now - tw.start) / tw.dur);
+    tw.fn(k);
+    if (k >= 1) { tweens.splice(i, 1); tw.res(); }
+  }
+}
+setInterval(stepTweens, 120);
+
+let followActive = false;
+const followTarget = new THREE.Vector3();
+
+function followToken(spaceIdx) {
+  if (!settings.cameraFollow || controls.autoRotate) return;
+  const t = tileTransform(spaceIdx);
+  followTarget.set(t.x * 0.45, 0, t.z * 0.45);
+  followActive = true;
+}
+
+function animate() {
+  requestAnimationFrame(animate);
+  stepTweens();
+  if (followActive) {
+    controls.target.lerp(followTarget, 0.06);
+    if (controls.target.distanceTo(followTarget) < 0.05) followActive = false;
+  }
+  controls.update();
+  if (highlightRing.visible) {
+    const s = 1 + 0.07 * Math.sin(clock.getElapsedTime() * 4);
+    highlightRing.scale.set(s, s, 1);
+    highlightRing.material.opacity = 0.6 + 0.3 * Math.sin(clock.getElapsedTime() * 4);
+  }
+  renderer.render(scene, camera);
+}
+
+/* --- money popups + screen projection --- */
+
+const shownCash = [];
+
+function worldToScreen(v) {
+  const p = v.clone().project(camera);
+  return { x: (p.x * 0.5 + 0.5) * innerWidth, y: (-p.y * 0.5 + 0.5) * innerHeight };
+}
+
+function moneyPop(player, amount) {
+  const idx = state.players.indexOf(player);
+  if (idx < 0 || !tokenGroups[idx]) return;
+  const wp = tokenGroups[idx].position.clone();
+  wp.y += 0.8;
+  const s = worldToScreen(wp);
+  const el = document.createElement('div');
+  el.className = 'money-pop';
+  el.style.left = s.x + 'px';
+  el.style.top = s.y + 'px';
+  el.style.color = amount >= 0 ? 'var(--green)' : 'var(--red)';
+  el.textContent = (amount >= 0 ? '+' : '−') + '$' + Math.abs(amount).toLocaleString();
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 1200);
+}
+
+/* --- 3D tokens --- */
+
+function tokenWorldPos(playerIdx, spaceIdx) {
+  const t = tileTransform(spaceIdx);
+  const off = [[-0.2, -0.2], [0.2, -0.2], [-0.2, 0.2], [0.2, 0.2]][playerIdx];
+  return new THREE.Vector3(t.x + off[0], BOARD_TOP, t.z + off[1]);
+}
+
+function tokenMaterial(color) {
+  return new THREE.MeshStandardMaterial({
+    color, metalness: 0.75, roughness: 0.22,
+    emissive: color, emissiveIntensity: 0.12,
+  });
+}
+
+function buildTokenModel(idx, color) {
+  const g = new THREE.Group();
+  const mat = tokenMaterial(color);
+  const baseMat = new THREE.MeshStandardMaterial({ color: 0x2a3040, metalness: 0.6, roughness: 0.35 });
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.24, 0.06, 28), baseMat);
+  base.position.y = 0.03;
+  base.castShadow = true;
+  g.add(base);
+
+  if (idx === 0) {
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.11, 0.3, 20), mat);
+    body.position.y = 0.22;
+    body.castShadow = true;
+    g.add(body);
+    const nose = new THREE.Mesh(new THREE.ConeGeometry(0.085, 0.16, 20), mat);
+    nose.position.y = 0.45;
+    nose.castShadow = true;
+    g.add(nose);
+  } else if (idx === 1) {
+    const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.17), mat);
+    gem.scale.y = 1.35;
+    gem.position.y = 0.31;
+    gem.castShadow = true;
+    g.add(gem);
+  } else if (idx === 2) {
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.21, 0.21, 0.21), mat);
+    head.position.y = 0.21;
+    head.castShadow = true;
+    g.add(head);
+    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.09, 8), mat);
+    stem.position.y = 0.36;
+    g.add(stem);
+    const tip = new THREE.Mesh(new THREE.SphereGeometry(0.035, 12, 12), mat);
+    tip.position.y = 0.42;
+    g.add(tip);
+  } else {
+    const gem = new THREE.Mesh(new THREE.IcosahedronGeometry(0.165), mat);
+    gem.position.y = 0.28;
+    gem.castShadow = true;
+    g.add(gem);
+  }
+  return g;
+}
+
+function buildTokens() {
+  state.players.forEach((p, idx) => {
+    const g = buildTokenModel(idx, p.color);
+    g.position.copy(tokenWorldPos(idx, p.pos));
+    scene.add(g);
+    tokenGroups.push(g);
+  });
+}
+
+async function animateTokenStep(playerIdx, fromIdx, toIdx) {
+  const g = tokenGroups[playerIdx];
+  const a = tokenWorldPos(playerIdx, fromIdx);
+  const b = tokenWorldPos(playerIdx, toIdx);
+  sfx('step');
+  followToken(toIdx);
+  await tween(stepMs(), k => {
+    g.position.lerpVectors(a, b, k);
+    g.position.y = BOARD_TOP + Math.sin(k * Math.PI) * 0.45;
+  });
+}
+
+function buildingMeshFor(level) {
+  const g = new THREE.Group();
+  if (level >= 4) {
+    const tower = new THREE.Mesh(
+      new THREE.BoxGeometry(0.34, 0.72, 0.34),
+      new THREE.MeshStandardMaterial({ color: 0xf5c542, roughness: 0.25, metalness: 0.6 })
+    );
+    tower.position.y = 0.36;
+    tower.castShadow = true;
+    g.add(tower);
+    const cap = new THREE.Mesh(
+      new THREE.ConeGeometry(0.22, 0.18, 4),
+      new THREE.MeshStandardMaterial({ color: 0xffe28a, roughness: 0.2, metalness: 0.7, emissive: 0x6b5410, emissiveIntensity: 0.6 })
+    );
+    cap.position.y = 0.81;
+    cap.rotation.y = Math.PI / 4;
+    g.add(cap);
+  } else {
+    for (let k = 0; k < level; k++) {
+      const h = 0.22 + k * 0.06;
+      const b = new THREE.Mesh(
+        new THREE.BoxGeometry(0.17, h, 0.17),
+        new THREE.MeshStandardMaterial({ color: 0xe8ecf5, roughness: 0.4 })
+      );
+      b.position.set((k - (level - 1) / 2) * 0.24, h / 2, 0);
+      b.castShadow = true;
+      g.add(b);
+      const roof = new THREE.Mesh(
+        new THREE.BoxGeometry(0.19, 0.045, 0.19),
+        new THREE.MeshStandardMaterial({ color: 0x3a4254, roughness: 0.5 })
+      );
+      roof.position.set(b.position.x, h + 0.022, 0);
+      g.add(roof);
+    }
+  }
+  return g;
+}
+
+function update3D() {
+  SPACES.forEach((sp, i) => {
+    if (!sp.price) return;
+    const bar = ownerBars[i];
+    if (sp.owner == null) bar.visible = false;
+    else {
+      bar.visible = true;
+      bar.material.color.set(state.players[sp.owner].color);
+      bar.material.emissive.set(state.players[sp.owner].color);
+      bar.material.opacity = sp.mortgaged ? 0.32 : 1;
+      bar.material.transparent = !!sp.mortgaged;
+    }
+    const lvl = sp.level || 0;
+    if (lvl !== buildingLevels[i]) {
+      buildingLevels[i] = lvl;
+      const bg = buildingGroups[i];
+      while (bg.children.length) bg.remove(bg.children[0]);
+      if (lvl > 0) bg.add(buildingMeshFor(lvl));
+    }
+  });
+  state.players.forEach((p, idx) => {
+    const g = tokenGroups[idx];
+    if (!g) return;
+    g.visible = p.alive;
+    if (p.alive && tweens.length === 0) g.position.copy(tokenWorldPos(idx, p.pos));
+  });
+  const cur = currentPlayer();
+  if (cur && cur.alive && !state.over) {
+    const t = tileTransform(cur.pos);
+    highlightRing.position.x = t.x;
+    highlightRing.position.z = t.z;
+    highlightRing.visible = true;
+  } else {
+    highlightRing.visible = false;
+  }
+}
+
+const DICE_EUL = { 1:[0,0,0], 2:[-90,0,0], 3:[0,0,90], 4:[0,0,-90], 5:[90,0,0], 6:[180,0,0] };
+async function rollDiceAnim(d1, d2) {
+  sfx('dice');
+  const dur = diceMs();
+  await Promise.all(diceMeshes.map((m, k) => {
+    const v = k === 0 ? d1 : d2;
+    const [ex, ey, ez] = DICE_EUL[v].map(a => a * Math.PI / 180);
+    const spinsX = (2 + k) * Math.PI * 2;
+    const spinsY = (1 + k) * Math.PI * 2;
+    return tween(dur, t => {
+      const u = 1 - Math.pow(1 - t, 3);
+      m.rotation.set(ex + spinsX * (1 - u), ey + spinsY * (1 - u), ez);
+      m.position.y = 0.45 + Math.sin(Math.min(1, t) * Math.PI) * 1.5 * (1 - t * 0.5);
+    });
+  }));
+}
+
+/* ====================== UI HELPERS ====================== */
+
+const $ = id => document.getElementById(id);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const fmt = n => '$' + n.toLocaleString();
+
+function log(msg, important) {
+  const div = document.createElement('div');
+  div.textContent = msg;
+  if (important) div.className = 'important';
+  $('log').prepend(div);
+  while ($('log').children.length > 60) $('log').lastChild.remove();
+}
+
+function dialog(title, bodyHTML, buttons) {
+  return new Promise(resolve => {
+    const modal = $('modal');
+    modal.innerHTML = `<h2>${title}</h2><div class="body">${bodyHTML}</div><div class="btn-row"></div>`;
+    const row = modal.querySelector('.btn-row');
+    buttons.forEach(b => {
+      const btn = document.createElement('button');
+      btn.className = 'btn' + (b.cls != null ? (b.cls ? ' ' + b.cls : '') : ' btn-primary');
+      btn.textContent = b.label;
+      btn.onclick = () => { $('overlay').style.display = 'none'; resolve(b.value); };
+      row.appendChild(btn);
+    });
+    $('overlay').style.display = 'flex';
+  });
+}
+
+function deedHTML(sp) {
+  const sec = SECTORS[sp.sector];
+  return `<div class="deed">
+    <div class="deed-head" style="background:linear-gradient(170deg, ${sec.color}, ${shade(sec.color, -25)})"><b>${sp.name}</b><small>${sec.label}</small></div>
+    <div class="deed-body">
+      <div><span>Price</span><b>${fmt(sp.price)}</b></div>
+      <div><span>Base rent</span><b>${fmt(sp.rent)}</b></div>
+      <div><span>Rent with full sector</span><b>${fmt(sp.rent * 2)}</b></div>
+      <div><span>Rent at max upgrades</span><b>${fmt(sp.rent * RENT_MULT[4])}</b></div>
+      <div><span>Upgrade cost</span><b>${fmt(sec.upg)} each</b></div>
+    </div>
+  </div>`;
+}
+
+function avatarHTML(p) {
+  return `<div class="avatar" style="background:linear-gradient(150deg, ${shade(p.color, 22)}, ${shade(p.color, -18)})">${p.name.slice(0, 1).toUpperCase()}</div>`;
+}
+
+const cashEls = [];
+function renderPlayers() {
+  const list = $('players-list');
+  list.innerHTML = '';
+  cashEls.length = 0;
+  state.players.forEach((p, idx) => {
+    const card = document.createElement('div');
+    card.className = 'pcard' + (idx === state.turn ? ' current' : '') + (p.alive ? '' : ' dead');
+    const props = SPACES.filter(sp => sp.owner === idx);
+    const chips = props.map(sp => {
+      const c = sp.type === 'prop' ? SECTORS[sp.sector].color : (sp.type === 'logi' ? '#6b7280' : '#9ca3af');
+      return `<div class="chip" style="background:${c}${sp.mortgaged ? ';opacity:.4' : ''}" title="${sp.name}${sp.level ? ' (lvl ' + sp.level + ')' : ''}${sp.mortgaged ? ' [mortgaged]' : ''}"></div>`;
+    }).join('');
+    if (shownCash[idx] == null) shownCash[idx] = p.cash;
+    card.innerHTML = `
+      <div class="prow">
+        ${avatarHTML(p)}
+        <div class="pname">${p.name}${p.inJail ? '<span class="tag">JAIL</span>' : ''}${p.jailCards ? `<span class="tag gold">PASS ×${p.jailCards}</span>` : ''}</div>
+        <div class="cash">${p.alive ? fmt(Math.round(shownCash[idx])) : 'OUT'}</div>
+      </div>
+      ${chips ? `<div class="prop-chips">${chips}</div>` : ''}`;
+    cashEls[idx] = card.querySelector('.cash');
+    list.appendChild(card);
+  });
+  animateCash();
+}
+
+let cashAnimRAF = null;
+function animateCash() {
+  if (cashAnimRAF) return;
+  const tick = () => {
+    let active = false;
+    state.players.forEach((p, idx) => {
+      if (!p.alive || !cashEls[idx]) return;
+      const diff = p.cash - shownCash[idx];
+      if (Math.abs(diff) < 1) { shownCash[idx] = p.cash; }
+      else { shownCash[idx] += diff * 0.18; active = true; }
+      cashEls[idx].textContent = fmt(Math.round(shownCash[idx]));
+    });
+    cashAnimRAF = active ? requestAnimationFrame(tick) : null;
+  };
+  tick();
+}
+
+function renderAll() { update3D(); renderPlayers(); }
+
+function setButtons({ roll, end, manage }) {
+  $('roll-btn').disabled = !roll;
+  $('end-btn').disabled = !end;
+  $('manage-btn').disabled = !manage;
+  $('trade-btn').disabled = !manage;
+}
+
+function centerMsg(msg) { $('center-msg').textContent = msg; }
+
+function setTurnPill(p, text) {
+  $('turn-pill').innerHTML = `<span class="dot" style="background:${p.color};color:${p.color}"></span>${text}`;
+}
+
+/* ====================== GAME LOGIC ====================== */
+
+function currentPlayer() { return state.players[state.turn]; }
+function alivePlayers() { return state.players.filter(p => p.alive); }
+
+function ownsFullSector(playerIdx, sector) {
+  return SPACES.filter(sp => sp.sector === sector).every(sp => sp.owner === playerIdx);
+}
+function countOwned(playerIdx, type) {
+  return SPACES.filter(sp => sp.type === type && sp.owner === playerIdx).length;
+}
+function rentFor(spaceIdx) {
+  const sp = SPACES[spaceIdx];
+  if (sp.type === 'logi') return 25 * Math.pow(2, countOwned(sp.owner, 'logi') - 1);
+  if (sp.type === 'cloud') return state.lastRoll * (countOwned(sp.owner, 'cloud') === 2 ? 10 : 4);
+  let rent = sp.rent * RENT_MULT[sp.level];
+  if (sp.level === 0 && ownsFullSector(sp.owner, sp.sector)) rent *= 2;
+  return rent;
+}
+
+/* ====================== AI OPPONENTS ====================== */
+
+// auto-dismissing card/info modal so humans can read what a bot drew
+function dialogAuto(title, bodyHTML, ms) {
+  const modal = $('modal');
+  modal.innerHTML = `<h2>${title}</h2><div class="body">${bodyHTML}</div>`;
+  $('overlay').style.display = 'flex';
+  return sleep(ms).then(() => { $('overlay').style.display = 'none'; });
+}
+
+function sectorCompletedBy(playerIdx, sp) {
+  return sp.sector && SPACES.filter(s => s.sector === sp.sector && s !== sp).every(s => s.owner === playerIdx);
+}
+
+function aiWantsToBuy(p, sp) {
+  if (sectorCompletedBy(state.turn, sp)) return p.cash >= sp.price; // completes a monopoly: always
+  return p.cash >= sp.price + 120;
+}
+
+function aiJailChoice(p) {
+  if ((p.jailCards || 0) > 0) return 'card';
+  if (p.cash >= settings.jailFine + 150) return 'pay';
+  return 'roll';
+}
+
+function aiAuctionMax(p, sp) {
+  const mult = sectorCompletedBy(state.players.indexOf(p), sp) ? 1.5 : 0.85;
+  return Math.min(Math.floor(sp.price * mult), p.cash - 80);
+}
+
+// raise cash without dialogs: mortgage first, then sell. Returns false when out of moves.
+function aiRaiseCash(p) {
+  const idx = state.players.indexOf(p);
+  const m = SPACES.map((sp, i) => ({ sp, i }))
+    .filter(x => x.sp.owner === idx && !x.sp.mortgaged && !x.sp.level)
+    .sort((a, b) => a.sp.price - b.sp.price)[0];
+  if (m) {
+    const v = Math.floor(m.sp.price / 2);
+    m.sp.mortgaged = true;
+    p.cash += v;
+    log(`${p.name} mortgaged ${m.sp.name} for ${fmt(v)}.`);
+    renderAll();
+    return true;
+  }
+  const s = SPACES.map((sp, i) => ({ sp, i }))
+    .filter(x => x.sp.owner === idx && x.sp.level)
+    .sort((a, b) => a.sp.price - b.sp.price)[0];
+  if (s) {
+    const v = Math.floor(s.sp.price / 2) + Math.floor(s.sp.level * SECTORS[s.sp.sector].upg / 2);
+    p.cash += v;
+    log(`${p.name} sold ${s.sp.name} for ${fmt(v)}.`);
+    s.sp.owner = null; s.sp.level = 0; s.sp.mortgaged = false;
+    renderAll();
+    return true;
+  }
+  return false;
+}
+
+async function aiManage(p) {
+  const idx = state.players.indexOf(p);
+  // unmortgage when flush
+  for (let i = 0; i < 10; i++) {
+    const um = SPACES.find(sp => sp.owner === idx && sp.mortgaged && p.cash > Math.ceil(sp.price * 0.55) + 300);
+    if (!um) break;
+    p.cash -= Math.ceil(um.price * 0.55);
+    um.mortgaged = false;
+    log(`${p.name} unmortgaged ${um.name}.`);
+  }
+  // build evenly on full sectors
+  for (let i = 0; i < 12; i++) {
+    const c = SPACES.map((sp, j) => ({ sp, j }))
+      .filter(x => x.sp.type === 'prop' && x.sp.owner === idx && x.sp.level < 4
+        && ownsFullSector(idx, x.sp.sector)
+        && SPACES.filter(s => s.sector === x.sp.sector).every(s => !s.mortgaged)
+        && p.cash >= SECTORS[x.sp.sector].upg + 250)
+      .sort((a, b) => a.sp.level - b.sp.level)[0];
+    if (!c) break;
+    p.cash -= SECTORS[c.sp.sector].upg;
+    c.sp.level++;
+    sfx('buy');
+    log(`${p.name} built on ${c.sp.name} (level ${c.sp.level}).`);
+    renderAll();
+    await sleep(300);
+  }
+}
+
+/* ====================== AUCTIONS ====================== */
+
+async function runAuction(spIdx) {
+  const sp = SPACES[spIdx];
+  const bidders = state.players.map((pl, i) => ({ pl, i })).filter(x => x.pl.alive);
+  if (bidders.length < 2) return;
+  log(`${sp.name} goes to auction!`, true);
+  let bid = 0, leader = null;
+  const folded = new Set();
+
+  const stateHTML = () => `${sp.type === 'prop' ? deedHTML(sp) : `<b>${sp.name}</b> · list price ${fmt(sp.price)}`}
+    <div class="auction-state">${leader ? `Current bid: ${fmt(bid)} <small>held by ${leader.pl.name}</small>` : 'No bids yet — opening at $10'}</div>`;
+
+  while (true) {
+    const remaining = bidders.filter(x => !folded.has(x));
+    if (remaining.length === 0) break;
+    if (leader && remaining.length === 1 && remaining[0] === leader) break;
+    let acted = false;
+    for (const a of bidders) {
+      if (folded.has(a) || a === leader || state.over) continue;
+      const minBid = (leader ? bid : 0) + 10;
+      if (a.pl.cash < minBid) { folded.add(a); continue; }
+      let inc = 0;
+      if (a.pl.isAI) {
+        const max = aiAuctionMax(a.pl, sp);
+        if (minBid <= max) inc = (bid + 50 <= max && Math.random() < 0.45) ? 50 : 10;
+        await sleep(350);
+      } else {
+        const opts = [10, 50, 100]
+          .filter(x => bid + x <= a.pl.cash)
+          .map(x => ({ label: `Bid ${fmt(bid + x)}`, value: x, cls: x === 10 ? undefined : '' }));
+        opts.push({ label: 'Fold', value: 0, cls: 'btn-danger' });
+        inc = await dialog(`${a.pl.name} — Auction`, stateHTML(), opts);
+      }
+      if (inc === 0) {
+        folded.add(a);
+        log(`${a.pl.name} folds.`);
+      } else {
+        bid += inc;
+        leader = a;
+        sfx('click');
+        log(`${a.pl.name} bids ${fmt(bid)}.`);
+      }
+      acted = true;
+    }
+    if (!acted) break;
+  }
+
+  if (leader) {
+    leader.pl.cash -= bid;
+    sp.owner = leader.i;
+    if (leader.pl.stats) leader.pl.stats.bought++;
+    sfx('buy');
+    log(`${leader.pl.name} wins ${sp.name} at auction for ${fmt(bid)}!`, true);
+  } else {
+    log(`No bids — ${sp.name} stays on the market.`);
+  }
+  renderAll();
+}
+
+/* ====================== TRADING ====================== */
+
+function chipColor(sp) {
+  return sp.type === 'prop' ? SECTORS[sp.sector].color : (sp.type === 'logi' ? '#6b7280' : '#9ca3af');
+}
+
+function tradeValue(forIdx, sp, otherIdx) {
+  // value of sp to forIdx; worth more if it completes forIdx's sector,
+  // and giving away a piece that completes otherIdx's sector costs extra
+  let v = sp.price;
+  if (sectorCompletedBy(forIdx, sp)) v *= 1.8;
+  if (otherIdx != null && sectorCompletedBy(otherIdx, sp)) v = Math.max(v, sp.price * 1.7);
+  return v;
+}
+
+function aiEvalTrade(partnerIdx, proposerIdx, t) {
+  const vIn = t.give.reduce((s, i) => s + tradeValue(partnerIdx, SPACES[i], null), 0) + t.cashGive;
+  const vOut = t.get.reduce((s, i) => s + tradeValue(partnerIdx, SPACES[i], proposerIdx), 0) + t.cashGet;
+  return vIn >= vOut * 1.15;
+}
+
+async function openTrade(p) {
+  const myIdx = state.players.indexOf(p);
+  const others = state.players.map((pl, i) => ({ pl, i })).filter(x => x.pl.alive && x.pl !== p);
+  if (!others.length) return;
+  const partnerIdx = await dialog('Trade with…', 'Pick a player to negotiate with.',
+    [...others.map(o => ({ label: o.pl.name, value: o.i, cls: '' })), { label: 'Cancel', value: -1, cls: 'btn-danger' }]);
+  if (partnerIdx < 0) return;
+  const partner = state.players[partnerIdx];
+
+  const tradable = idx => SPACES.map((sp, i) => ({ sp, i }))
+    .filter(x => x.sp.owner === idx && !x.sp.level && !x.sp.mortgaged);
+
+  const t = await new Promise(resolve => {
+    const modal = $('modal');
+    const sel = { give: new Set(), get: new Set() };
+    const col = (title, items, key, cashId) => `<div class="trade-col"><h4>${title}</h4>
+      ${items.map(x => `<div class="trade-chip" data-k="${key}" data-i="${x.i}">
+        <div class="chip" style="background:${chipColor(x.sp)}"></div>${x.sp.name}</div>`).join('')
+        || '<i style="font-size:12px;color:var(--muted)">No tradeable companies</i>'}
+      <input class="trade-cash" id="${cashId}" type="number" min="0" placeholder="+ cash ($)"></div>`;
+    modal.innerHTML = `<h2>Trade with ${partner.name}</h2>
+      <div class="body">Only unbuilt, unmortgaged companies can be traded.
+        <div class="trade-cols">${col('You give', tradable(myIdx), 'give', 'tc-give')}${col('You receive', tradable(partnerIdx), 'get', 'tc-get')}</div>
+      </div><div class="btn-row"></div>`;
+    modal.querySelectorAll('.trade-chip').forEach(ch => ch.onclick = () => {
+      const k = ch.dataset.k, i = +ch.dataset.i;
+      sel[k].has(i) ? sel[k].delete(i) : sel[k].add(i);
+      ch.classList.toggle('on');
+    });
+    const row = modal.querySelector('.btn-row');
+    const mk = (label, cls, fn) => {
+      const b = document.createElement('button');
+      b.className = 'btn' + (cls ? ' ' + cls : '');
+      b.textContent = label;
+      b.onclick = fn;
+      row.appendChild(b);
+    };
+    mk('Cancel', 'btn-danger', () => { $('overlay').style.display = 'none'; resolve(null); });
+    mk('Propose', 'btn-primary', () => {
+      const cashGive = Math.max(0, Math.min(p.cash, +($('tc-give').value || 0)));
+      const cashGet = Math.max(0, Math.min(partner.cash, +($('tc-get').value || 0)));
+      if (!sel.give.size && !sel.get.size && !cashGive && !cashGet) return;
+      $('overlay').style.display = 'none';
+      resolve({ give: [...sel.give], get: [...sel.get], cashGive, cashGet });
+    });
+    $('overlay').style.display = 'flex';
+  });
+  if (!t) return;
+
+  const list = idxs => idxs.map(i => SPACES[i].name).join(', ') || 'nothing';
+  const summary = `<b>${p.name}</b> offers: ${list(t.give)}${t.cashGive ? ` + ${fmt(t.cashGive)}` : ''}<br>
+    in exchange for: ${list(t.get)}${t.cashGet ? ` + ${fmt(t.cashGet)}` : ''}.`;
+
+  let accepted;
+  if (partner.isAI) {
+    await dialogAuto(`${partner.name} is considering…`, summary, 1500);
+    accepted = aiEvalTrade(partnerIdx, myIdx, t);
+  } else {
+    accepted = await dialog(`${partner.name}, do you accept?`, summary,
+      [{ label: 'Accept', value: true }, { label: 'Decline', value: false, cls: 'btn-danger' }]);
+  }
+
+  if (accepted) {
+    t.give.forEach(i => SPACES[i].owner = partnerIdx);
+    t.get.forEach(i => SPACES[i].owner = myIdx);
+    p.cash += t.cashGet - t.cashGive;
+    partner.cash += t.cashGive - t.cashGet;
+    sfx('buy');
+    log(`Trade completed between ${p.name} and ${partner.name}.`, true);
+    renderAll();
+  } else {
+    log(`${partner.name} declined the trade.`);
+  }
+}
+
+function startTurn() {
+  if (state.over) return;
+  const p = currentPlayer();
+  state.doubles = 0;
+  state.turnCount++;
+  saveGame();
+  setTurnPill(p, p.isAI ? `${p.name} is thinking…` : `${p.name}'s turn`);
+  centerMsg(p.inJail ? 'You are in SEC Detention — roll doubles or pay the fine.' : 'Roll the dice!');
+  if (p.isAI) {
+    setButtons({ roll: false, end: false, manage: false });
+    (async () => {
+      await sleep(1000);
+      if (!state.over && currentPlayer() === p) onRoll();
+    })();
+  } else {
+    setButtons({ roll: true, end: false, manage: true });
+  }
+  renderAll();
+}
+
+async function onRoll() {
+  const p = currentPlayer();
+  setButtons({ roll: false, end: false, manage: false });
+
+  if (p.inJail) {
+    let choice = 'roll';
+    if (p.isAI) {
+      choice = aiJailChoice(p);
+    } else {
+      const buttons = [];
+      if ((p.jailCards || 0) > 0) buttons.push({ label: 'Use Free Pass', value: 'card' });
+      if (p.cash >= settings.jailFine) buttons.push({ label: `Pay ${fmt(settings.jailFine)}`, value: 'pay', cls: buttons.length ? '' : undefined });
+      if (buttons.length) {
+        buttons.push({ label: 'Roll for doubles', value: 'roll', cls: '' });
+        choice = await dialog('SEC Detention',
+          `Get out now, or try to roll doubles (attempt ${p.jailTurns + 1} of 3).`, buttons);
+      }
+    }
+    if (choice === 'card' && (p.jailCards || 0) <= 0) choice = p.cash >= settings.jailFine ? 'pay' : 'roll';
+    if (choice === 'card') {
+      p.jailCards--;
+      p.inJail = false; p.jailTurns = 0;
+      sfx('cash');
+      log(`${p.name} used a Free Pass to leave SEC Detention.`);
+      renderPlayers();
+    } else if (choice === 'pay') {
+      p.cash -= settings.jailFine;
+      p.inJail = false; p.jailTurns = 0;
+      log(`${p.name} paid ${fmt(settings.jailFine)} to leave SEC Detention.`);
+    }
+  }
+
+  const d1 = 1 + Math.floor(Math.random() * 6);
+  const d2 = 1 + Math.floor(Math.random() * 6);
+  state.lastRoll = d1 + d2;
+
+  await rollDiceAnim(d1, d2);
+  log(`${p.name} rolled ${d1} + ${d2} = ${d1 + d2}.`);
+
+  if (p.inJail) {
+    if (d1 === d2) {
+      p.inJail = false; p.jailTurns = 0;
+      log(`${p.name} rolled doubles and is released!`, true);
+      await movePlayer(p, d1 + d2);
+      await resolveSpace(p);
+    } else {
+      p.jailTurns++;
+      if (p.jailTurns >= 3) {
+        log(`${p.name} failed 3 times and must pay the ${fmt(settings.jailFine)} fine.`);
+        const paid = await settleDebt(p, settings.jailFine, null);
+        if (paid) {
+          p.inJail = false; p.jailTurns = 0;
+          await movePlayer(p, d1 + d2);
+          await resolveSpace(p);
+        }
+      } else {
+        centerMsg('No doubles. Still detained.');
+      }
+    }
+    finishRollPhase(false);
+    return;
+  }
+
+  let extraRoll = false;
+  if (d1 === d2) {
+    state.doubles++;
+    if (state.doubles >= 3) {
+      log(`${p.name} rolled 3 doubles in a row — straight to SEC Detention!`, true);
+      sendToJail(p);
+      finishRollPhase(false);
+      return;
+    }
+    extraRoll = true;
+  }
+
+  await movePlayer(p, d1 + d2);
+  await resolveSpace(p);
+  if (p.inJail || !p.alive) extraRoll = false;
+  finishRollPhase(extraRoll);
+}
+
+function finishRollPhase(extraRoll) {
+  if (state.over) return;
+  renderAll();
+  const p = currentPlayer();
+  if (!p.alive) { endTurn(); return; }
+  if (p.isAI) {
+    (async () => {
+      if (extraRoll && !p.inJail) {
+        await sleep(700);
+        if (!state.over && currentPlayer() === p) onRoll();
+      } else {
+        await aiManage(p);
+        await sleep(700);
+        if (!state.over && currentPlayer() === p) endTurn();
+      }
+    })();
+    return;
+  }
+  if (extraRoll) {
+    centerMsg('Doubles! Roll again.');
+    setButtons({ roll: true, end: false, manage: true });
+  } else {
+    setButtons({ roll: false, end: true, manage: true });
+  }
+}
+
+async function movePlayer(p, steps) {
+  const idx = state.players.indexOf(p);
+  for (let s = 0; s < steps; s++) {
+    const from = p.pos;
+    p.pos = (p.pos + 1) % 40;
+    if (p.pos === 0) {
+      p.cash += settings.goSalary;
+      moneyPop(p, settings.goSalary);
+      sfx('cash');
+      log(`${p.name} passed IPO DAY and collected ${fmt(settings.goSalary)}.`);
+      renderPlayers();
+    }
+    await animateTokenStep(idx, from, p.pos);
+  }
+}
+
+async function movePlayerBack(p, steps) {
+  const idx = state.players.indexOf(p);
+  for (let s = 0; s < steps; s++) {
+    const from = p.pos;
+    p.pos = (p.pos + 39) % 40;
+    await animateTokenStep(idx, from, p.pos);
+  }
+}
+
+function sendToJail(p) {
+  const idx = state.players.indexOf(p);
+  p.pos = JAIL_POS;
+  p.inJail = true;
+  p.jailTurns = 0;
+  state.doubles = 0;
+  sfx('jail');
+  tokenGroups[idx].position.copy(tokenWorldPos(idx, JAIL_POS));
+  renderAll();
+}
+
+async function resolveSpace(p) {
+  const sp = SPACES[p.pos];
+  centerMsg(sp.name);
+
+  switch (sp.type) {
+    case 'go':
+    case 'jail':
+      break;
+    case 'parking':
+      log(`${p.name} chills at the WeWork Lounge. Free kombucha.`);
+      break;
+    case 'gotojail':
+      log(`${p.name} got caught insider trading! Off to SEC Detention.`, true);
+      sendToJail(p);
+      break;
+    case 'tax':
+      log(`${p.name} owes ${sp.name}: ${fmt(sp.amount)}.`);
+      await settleDebt(p, sp.amount, null);
+      break;
+    case 'chance':
+      await drawCard(p, 'trending');
+      break;
+    case 'chest':
+      await drawCard(p, 'earnings');
+      break;
+    case 'prop':
+    case 'logi':
+    case 'cloud':
+      await resolveOwnable(p, p.pos);
+      break;
+  }
+  renderAll();
+  checkGameOver();
+}
+
+async function resolveOwnable(p, idx, rentMult = 1) {
+  const sp = SPACES[idx];
+  if (sp.owner == null) {
+    let buy = false;
+    if (p.isAI) {
+      buy = aiWantsToBuy(p, sp);
+      if (buy) await sleep(500);
+    } else if (p.cash >= sp.price) {
+      const body = sp.type === 'prop'
+        ? deedHTML(sp)
+        : `<b>${sp.name}</b> — ${sp.type === 'logi' ? 'Logistics company. Rent: $25 / $50 / $100 / $200 depending on how many you own.' : 'Cloud service. Rent: 4× your dice roll, or 10× if you own both.'}<br><br>Price: <b>${fmt(sp.price)}</b>`;
+      buy = await dialog(`Buy ${sp.name}?`, body + `<br>You have <b>${fmt(p.cash)}</b>.`,
+        [{ label: `Buy for ${fmt(sp.price)}`, value: true, cls: 'btn-primary' }, { label: 'Send to Auction', value: false, cls: '' }]);
+    }
+    if (buy && p.cash >= sp.price) {
+      p.cash -= sp.price;
+      moneyPop(p, -sp.price);
+      sp.owner = state.turn;
+      if (p.stats) p.stats.bought++;
+      sfx('buy');
+      log(`${p.name} acquired ${sp.name} for ${fmt(sp.price)}.`, true);
+    } else {
+      log(`${p.name} passed on ${sp.name}.`);
+      await runAuction(idx);
+    }
+  } else if (sp.owner === state.turn) {
+    centerMsg(`You own ${sp.name}. Welcome home.`);
+  } else if (state.players[sp.owner].alive) {
+    const owner = state.players[sp.owner];
+    if (sp.mortgaged) {
+      log(`${sp.name} is mortgaged — no rent due.`);
+      return;
+    }
+    const rent = rentFor(idx) * rentMult;
+    log(`${p.name} landed on ${sp.name} (owned by ${owner.name}). Rent: ${fmt(rent)}${rentMult > 1 ? ' (double rent!)' : ''}.`);
+    await settleDebt(p, rent, owner);
+  }
+}
+
+function cardGlyph(card) {
+  if (card.jail) return '!';
+  if (card.jailFree) return '★';
+  if (card.goto != null || card.nearest) return '→';
+  if (card.back) return '↩';
+  if (card.repairs) return '%';
+  if (card.fromEach || card.payEach) return '$';
+  return card.money > 0 ? '+' : '−';
+}
+
+async function drawCard(p, deckName) {
+  const deckKey = deckName === 'trending' ? 'trendingDeck' : 'earningsDeck';
+  const source = deckName === 'trending' ? TRENDING_CARDS : EARNINGS_CARDS;
+  if (state[deckKey].length === 0) state[deckKey] = shuffle(source);
+  const card = state[deckKey].pop();
+  const title = deckName === 'trending' ? 'Trending' : 'Earnings Report';
+
+  sfx('card');
+  const html = `<div class="card-stage"><div class="draw-card ${deckName}">
+    <div class="dc-head">${title}</div>
+    <div class="dc-body">
+      <div class="dc-glyph">${cardGlyph(card)}</div>
+      <div class="dc-text">${card.text}</div>
+    </div>
+  </div></div>`;
+  await dialog(`${p.name} drew a card`, html, [{ label: 'OK', value: true }]);
+  log(`${title}: ${card.text}`);
+
+  if (card.jailFree) {
+    p.jailCards = (p.jailCards || 0) + 1;
+    sfx('cash');
+    renderPlayers();
+    return;
+  }
+  if (card.jail) { sendToJail(p); return; }
+  if (card.goto != null) {
+    const steps = (card.goto - p.pos + 40) % 40;
+    await movePlayer(p, steps); // collects salary if IPO DAY is passed or reached
+    await resolveSpace(p);
+    return;
+  }
+  if (card.back) {
+    await movePlayerBack(p, card.back);
+    await resolveSpace(p);
+    return;
+  }
+  if (card.nearest) {
+    let steps = 1;
+    while (SPACES[(p.pos + steps) % 40].type !== card.nearest) steps++;
+    await movePlayer(p, steps);
+    await resolveOwnable(p, p.pos, 2);
+    renderAll();
+    checkGameOver();
+    return;
+  }
+  if (card.repairs) {
+    const pIdx = state.players.indexOf(p);
+    let total = 0;
+    SPACES.forEach(sp => {
+      if (sp.owner === pIdx && sp.level) {
+        total += sp.level >= 4 ? card.repairs[1] : sp.level * card.repairs[0];
+      }
+    });
+    if (total > 0) {
+      log(`${p.name} owes ${fmt(total)} in building costs.`);
+      await settleDebt(p, total, null);
+    } else {
+      log(`${p.name} owns no buildings. Nothing to pay.`);
+    }
+    return;
+  }
+  if (card.fromEach) {
+    for (const other of state.players.filter(x => x.alive && x !== p)) {
+      await settleDebt(other, card.fromEach, p);
+    }
+    renderPlayers();
+    return;
+  }
+  if (card.payEach) {
+    const others = state.players.filter(x => x.alive && x !== p);
+    const ok = await settleDebt(p, card.payEach * others.length, null);
+    if (ok) {
+      others.forEach(o => o.cash += card.payEach);
+      log(`Each player received ${fmt(card.payEach)}.`);
+      renderPlayers();
+    }
+    return;
+  }
+  if (card.money > 0) {
+    p.cash += card.money;
+    moneyPop(p, card.money);
+    sfx('cash');
+  } else if (card.money < 0) {
+    await settleDebt(p, -card.money, null);
+  }
+}
+
+async function settleDebt(p, amount, recipient) {
+  while (p.cash < amount) {
+    const pIdx = state.players.indexOf(p);
+    const sellable = SPACES.filter(sp => sp.owner === pIdx);
+    if (sellable.length === 0) break;
+    if (p.isAI) {
+      if (!aiRaiseCash(p)) break;
+    } else {
+      const sold = await openManage(p, true, amount, recipient);
+      if (!sold) break;
+    }
+  }
+
+  if (p.cash >= amount) {
+    p.cash -= amount;
+    moneyPop(p, -amount);
+    sfx('pay');
+    if (recipient) {
+      recipient.cash += amount;
+      moneyPop(recipient, amount);
+      if (recipient.stats) recipient.stats.rent += amount;
+      log(`${p.name} paid ${fmt(amount)} to ${recipient.name}.`);
+    } else {
+      log(`${p.name} paid ${fmt(amount)} to the bank.`);
+    }
+    renderPlayers();
+    return true;
+  }
+  await bankrupt(p, recipient);
+  return false;
+}
+
+async function bankrupt(p, creditor) {
+  const idx = state.players.indexOf(p);
+  p.alive = false;
+  if (creditor) {
+    creditor.cash += Math.max(0, p.cash);
+    SPACES.forEach(sp => { if (sp.owner === idx) sp.owner = state.players.indexOf(creditor); });
+    log(`${p.name} is BANKRUPT! All assets go to ${creditor.name}.`, true);
+  } else {
+    SPACES.forEach(sp => { if (sp.owner === idx) { sp.owner = null; sp.level = 0; } });
+    log(`${p.name} is BANKRUPT! Assets returned to the market.`, true);
+  }
+  p.cash = 0;
+  renderAll();
+  checkGameOver();
+}
+
+function netWorth(p) {
+  const idx = state.players.indexOf(p);
+  let total = p.cash;
+  SPACES.forEach(sp => {
+    if (sp.owner === idx) total += sp.price + (sp.level && sp.sector ? sp.level * SECTORS[sp.sector].upg : 0);
+  });
+  return total;
+}
+
+function renderGameOver(winner) {
+  $('win-title').textContent = `${winner.name} wins!`;
+  $('win-sub').textContent = `After ${state.turnCount} turns, the entire market belongs to ${winner.name}. The FTC has been notified.`;
+  const box = $('standings');
+  box.innerHTML = '';
+  const ranked = state.players.slice().sort((a, b) => (b.alive ? netWorth(b) : 0) - (a.alive ? netWorth(a) : 0));
+  ranked.forEach(p => {
+    const idx = state.players.indexOf(p);
+    const owned = SPACES.filter(sp => sp.owner === idx).length;
+    const stats = p.stats || { rent: 0, bought: 0 };
+    const row = document.createElement('div');
+    row.className = 'standing-row' + (p === winner ? ' winner' : '');
+    row.innerHTML = `
+      ${avatarHTML(p)}
+      <div>
+        <div class="sname">${p.name}</div>
+        <div class="sstatus">${p === winner ? 'Winner' : 'Bankrupt'}</div>
+      </div>
+      <div class="standing-stats">
+        <div class="stat"><span class="v">${owned}</span><span class="k">Companies</span></div>
+        <div class="stat"><span class="v">${fmt(stats.rent)}</span><span class="k">Rent Earned</span></div>
+        <div class="stat"><span class="v">${p.alive ? fmt(netWorth(p)) : '$0'}</span><span class="k">Net Worth</span></div>
+      </div>`;
+    box.appendChild(row);
+  });
+}
+
+function checkGameOver() {
+  const alive = alivePlayers();
+  if (alive.length === 1 && !state.over) {
+    state.over = true;
+    const w = alive[0];
+    setButtons({ roll: false, end: false, manage: false });
+    log(`${w.name} wins the game!`, true);
+    sfx('win');
+    try { localStorage.removeItem('copoly-save'); } catch (e) {}
+    setTimeout(() => {
+      ['topbar', 'sidebar', 'center-msg', 'actionbar'].forEach(id => $(id).classList.add('hidden'));
+      setMenuCamera();
+      renderGameOver(w);
+      showScreen('gameover-screen');
+    }, 900);
+  }
+}
+
+/* ====================== SAVE / RESUME ====================== */
+
+function saveGame() {
+  if (state.over) return;
+  try {
+    localStorage.setItem('copoly-save', JSON.stringify({
+      v: 1,
+      players: state.players,
+      turn: state.turn,
+      turnCount: state.turnCount,
+      lastRoll: state.lastRoll,
+      props: SPACES.map(sp => sp.price ? { o: sp.owner, l: sp.level, m: sp.mortgaged ? 1 : 0 } : 0),
+      trendingDeck: state.trendingDeck,
+      earningsDeck: state.earningsDeck,
+    }));
+  } catch (e) {}
+}
+
+function loadSave() {
+  try {
+    const d = JSON.parse(localStorage.getItem('copoly-save'));
+    return (d && d.v === 1 && Array.isArray(d.players) && d.players.length >= 2) ? d : null;
+  } catch (e) { return null; }
+}
+
+function resumeGame(d) {
+  state.players = d.players.map(p => ({ stats: { rent: 0, bought: 0 }, jailCards: 0, ...p }));
+  state.turn = d.turn;
+  state.turnCount = (d.turnCount || 1) - 1; // startTurn will re-increment
+  state.lastRoll = d.lastRoll || 0;
+  SPACES.forEach((sp, i) => {
+    if (sp.price) { sp.owner = d.props[i].o; sp.level = d.props[i].l; sp.mortgaged = !!d.props[i].m; }
+  });
+  state.trendingDeck = d.trendingDeck || [];
+  state.earningsDeck = d.earningsDeck || [];
+  shownCash.length = 0;
+  state.players.forEach((p, i) => shownCash[i] = p.cash);
+  showScreen(null);
+  ['topbar', 'sidebar', 'center-msg', 'actionbar'].forEach(id => $(id).classList.remove('hidden'));
+  setGameCamera();
+  buildTokens();
+  log('Game resumed. Welcome back to the market.', true);
+  startTurn();
+}
+
+function refreshTitleButtons() {
+  const d = loadSave();
+  const cont = $('btn-continue');
+  const play = $('btn-play');
+  if (d) {
+    cont.classList.remove('hidden');
+    cont.textContent = `Continue · Turn ${d.turnCount || 1}`;
+    play.textContent = 'New Game';
+    play.classList.remove('btn-primary');
+    play.classList.add('glass');
+  } else {
+    cont.classList.add('hidden');
+    play.textContent = 'Play';
+    play.classList.add('btn-primary');
+    play.classList.remove('glass');
+  }
+}
+
+function openManage(p, debtMode, debtAmount, creditor) {
+  return new Promise(resolve => {
+    const idx = state.players.indexOf(p);
+    const modal = $('modal');
+
+    function render() {
+      const owned = SPACES.map((sp, i) => ({ sp, i })).filter(x => x.sp.owner === idx);
+      let rows = owned.map(x => {
+        const sp = x.sp;
+        const color = sp.type === 'prop' ? SECTORS[sp.sector].color : (sp.type === 'logi' ? '#6b7280' : '#9ca3af');
+        const sellValue = Math.floor(sp.price / 2) + (sp.level ? Math.floor(sp.level * SECTORS[sp.sector].upg / 2) : 0);
+        const sectorClear = sp.sector && SPACES.filter(s => s.sector === sp.sector).every(s => !s.mortgaged);
+        const canUpgrade = !debtMode && sp.type === 'prop' && ownsFullSector(idx, sp.sector)
+          && sectorClear && sp.level < 4 && p.cash >= SECTORS[sp.sector].upg;
+        const mortVal = Math.floor(sp.price / 2);
+        const unmortVal = Math.ceil(sp.price * 0.55);
+        const canMortgage = !sp.level && !sp.mortgaged;
+        const canUnmortgage = sp.mortgaged && p.cash >= unmortVal;
+        const lvlTxt = sp.level ? ` · lvl ${sp.level}` : (sp.mortgaged ? ' · mortgaged' : '');
+        return `<div class="manage-row${sp.mortgaged ? ' mort' : ''}">
+          <div class="chip" style="background:${color}"></div>
+          <div class="mname">${sp.name}${lvlTxt}</div>
+          ${sp.type === 'prop' ? `<button class="up" data-up="${x.i}" ${canUpgrade ? '' : 'disabled'}>Build ${fmt(SECTORS[sp.sector].upg)}</button>` : ''}
+          ${sp.mortgaged
+            ? `<button class="mort-btn" data-unmort="${x.i}" data-val="${unmortVal}" ${canUnmortgage ? '' : 'disabled'}>Unmortgage ${fmt(unmortVal)}</button>`
+            : `<button class="mort-btn" data-mort="${x.i}" data-val="${mortVal}" ${canMortgage ? '' : 'disabled'}>Mortgage ${fmt(mortVal)}</button>`}
+          <button class="sell" data-sell="${x.i}" data-val="${sellValue}">Sell ${fmt(sellValue)}</button>
+        </div>`;
+      }).join('');
+      if (owned.length === 0) rows = '<i>You own nothing. Capitalism is hard.</i>';
+
+      const head = debtMode
+        ? `<b style="color:var(--red)">You owe ${fmt(debtAmount)}${creditor ? ' to ' + creditor.name : ''} and have ${fmt(p.cash)}.</b><br>Mortgage or sell assets to cover it, or declare bankruptcy.`
+        : `Cash: <b>${fmt(p.cash)}</b>. Build on full sectors (4th level is the golden HQ). Mortgage for fast cash with no rent, or sell back at half price.`;
+
+      modal.innerHTML = `<h2>${p.name}'s Portfolio</h2><div class="body">${head}<div style="margin-top:12px">${rows}</div></div><div class="btn-row"></div>`;
+      const btnRow = modal.querySelector('.btn-row');
+
+      if (debtMode) {
+        const payBtn = document.createElement('button');
+        payBtn.className = 'btn btn-primary';
+        payBtn.textContent = `Pay ${fmt(debtAmount)}`;
+        payBtn.disabled = p.cash < debtAmount;
+        payBtn.onclick = () => close(true);
+        btnRow.appendChild(payBtn);
+        const bk = document.createElement('button');
+        bk.className = 'btn btn-danger';
+        bk.textContent = 'Declare Bankruptcy';
+        bk.onclick = () => close(false);
+        btnRow.appendChild(bk);
+      } else {
+        const done = document.createElement('button');
+        done.className = 'btn btn-primary';
+        done.textContent = 'Done';
+        done.onclick = () => close(true);
+        btnRow.appendChild(done);
+      }
+
+      modal.querySelectorAll('[data-up]').forEach(b => b.onclick = () => {
+        const sp = SPACES[+b.dataset.up];
+        p.cash -= SECTORS[sp.sector].upg;
+        sp.level++;
+        sfx('buy');
+        log(`${p.name} built on ${sp.name} (level ${sp.level}).`);
+        renderAll(); render();
+      });
+      modal.querySelectorAll('[data-mort]').forEach(b => b.onclick = () => {
+        const sp = SPACES[+b.dataset.mort];
+        p.cash += +b.dataset.val;
+        sp.mortgaged = true;
+        sfx('cash');
+        log(`${p.name} mortgaged ${sp.name} for ${fmt(b.dataset.val)}.`);
+        renderAll(); render();
+      });
+      modal.querySelectorAll('[data-unmort]').forEach(b => b.onclick = () => {
+        const sp = SPACES[+b.dataset.unmort];
+        p.cash -= +b.dataset.val;
+        sp.mortgaged = false;
+        sfx('pay');
+        log(`${p.name} unmortgaged ${sp.name} for ${fmt(b.dataset.val)}.`);
+        renderAll(); render();
+      });
+      modal.querySelectorAll('[data-sell]').forEach(b => b.onclick = () => {
+        const sp = SPACES[+b.dataset.sell];
+        p.cash += +b.dataset.val;
+        sfx('cash');
+        log(`${p.name} sold ${sp.name} back to the market for ${fmt(b.dataset.val)}.`);
+        sp.owner = null; sp.level = 0; sp.mortgaged = false;
+        renderAll(); render();
+      });
+    }
+
+    function close(val) {
+      $('overlay').style.display = 'none';
+      renderAll();
+      resolve(val);
+    }
+
+    render();
+    $('overlay').style.display = 'flex';
+  });
+}
+
+function endTurn() {
+  if (state.over) return;
+  let next = state.turn;
+  do { next = (next + 1) % state.players.length; } while (!state.players[next].alive);
+  state.turn = next;
+  startTurn();
+}
+
+/* ====================== MENU FLOW ====================== */
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden'));
+  if (id) $(id).classList.remove('hidden');
+}
+
+let optionsReturn = 'title-screen'; // where the Options "Done" button goes back to
+
+/* --- options UI --- */
+
+const OPTION_DEFS = [
+  { key: 'startingCash', label: 'Starting Cash', values: [1000, 1500, 2000, 2500], fmt: v => '$' + (v >= 1000 ? (v / 1000) + 'k' : v) },
+  { key: 'goSalary',     label: 'IPO Day Salary', values: [100, 200, 400], fmt: v => '$' + v },
+  { key: 'jailFine',     label: 'SEC Fine', values: [25, 50, 100], fmt: v => '$' + v },
+  { key: 'animSpeed',    label: 'Animation Speed', values: ['normal', 'fast'], fmt: v => v === 'normal' ? 'Normal' : 'Fast' },
+  { key: 'sound',        label: 'Sound Effects', values: [true, false], fmt: v => v ? 'On' : 'Off' },
+  { key: 'music',        label: 'Music', values: [true, false], fmt: v => v ? 'On' : 'Off' },
+  { key: 'cameraFollow', label: 'Camera Follow', values: [true, false], fmt: v => v ? 'On' : 'Off' },
+];
+
+function renderOptions() {
+  const body = $('options-body');
+  body.innerHTML = '';
+  OPTION_DEFS.forEach(def => {
+    const label = document.createElement('div');
+    label.className = 'field-label';
+    label.textContent = def.label;
+    body.appendChild(label);
+    const seg = document.createElement('div');
+    seg.className = 'seg';
+    def.values.forEach(v => {
+      const b = document.createElement('button');
+      b.textContent = def.fmt(v);
+      if (settings[def.key] === v) b.classList.add('on');
+      b.onclick = () => {
+        settings[def.key] = v;
+        saveSettings();
+        seg.querySelectorAll('button').forEach(x => x.classList.remove('on'));
+        b.classList.add('on');
+        if (def.key === 'music') v ? startMusic() : stopMusic();
+      };
+      seg.appendChild(b);
+    });
+    body.appendChild(seg);
+  });
+}
+
+/* --- player setup --- */
+
+let numPlayers = 2;
+const BOT_NAMES = ['CEO Bot', 'MogulTron', 'Hedge Lord', 'Bull-E'];
+const playerTypes = ['human', 'human', 'human', 'human']; // player 1 always human
+
+function renderNameInputs() {
+  const box = $('name-inputs');
+  box.innerHTML = '';
+  for (let i = 0; i < numPlayers; i++) {
+    const isBot = playerTypes[i] === 'ai';
+    box.insertAdjacentHTML('beforeend', `<div class="player-row">
+      <input id="pname-${i}" placeholder="Player ${i + 1} (${TOKEN_NAMES[i]} token)" maxlength="14"
+        ${isBot ? `disabled value="${BOT_NAMES[i]}"` : ''}>
+      ${i === 0 ? '' : `<div class="seg mini" data-i="${i}">
+        <button data-t="human" class="${isBot ? '' : 'on'}">Human</button>
+        <button data-t="ai" class="${isBot ? 'on' : ''}">Bot</button>
+      </div>`}
+    </div>`);
+  }
+  box.querySelectorAll('.seg.mini button').forEach(b => b.onclick = () => {
+    playerTypes[+b.parentElement.dataset.i] = b.dataset.t;
+    renderNameInputs();
+  });
+}
+
+document.querySelectorAll('#seg-players button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('#seg-players button').forEach(x => x.classList.remove('on'));
+  b.classList.add('on');
+  numPlayers = +b.dataset.n;
+  renderNameInputs();
+});
+renderNameInputs();
+
+/* --- wiring --- */
+
+$('btn-play').onclick = () => showScreen('setup-screen');
+$('btn-continue').onclick = () => { const d = loadSave(); if (d) resumeGame(d); else refreshTitleButtons(); };
+$('btn-options').onclick = () => { optionsReturn = 'title-screen'; renderOptions(); showScreen('options-screen'); };
+$('btn-howto').onclick = () => showScreen('howto-screen');
+$('setup-back').onclick = () => showScreen('title-screen');
+$('howto-back').onclick = () => showScreen('title-screen');
+$('options-back').onclick = () => showScreen(optionsReturn);
+$('gameover-btn').onclick = () => location.reload();
+refreshTitleButtons();
+
+$('pause-btn').onclick = async () => {
+  const v = await dialog('Paused', '', [
+    { label: 'Resume', value: 'resume' },
+    { label: 'Options', value: 'options', cls: '' },
+    { label: 'Quit to Title', value: 'quit', cls: 'btn-danger' },
+  ]);
+  if (v === 'options') {
+    optionsReturn = null;
+    renderOptions();
+    showScreen('options-screen');
+  } else if (v === 'quit') {
+    location.reload();
+  }
+};
+
+$('roll-btn').onclick = onRoll;
+$('end-btn').onclick = endTurn;
+$('manage-btn').onclick = () => { if (!currentPlayer().isAI) openManage(currentPlayer(), false); };
+$('trade-btn').onclick = () => { if (!currentPlayer().isAI) openTrade(currentPlayer()); };
+
+$('start-btn').onclick = () => {
+  state.players = [];
+  for (let i = 0; i < numPlayers; i++) {
+    const isAI = playerTypes[i] === 'ai';
+    const name = $('pname-' + i).value.trim() || (isAI ? BOT_NAMES[i] : `Player ${i + 1}`);
+    state.players.push({
+      name, color: PLAYER_COLORS[i], isAI,
+      cash: settings.startingCash, pos: 0, inJail: false, jailTurns: 0, alive: true,
+      jailCards: 0, stats: { rent: 0, bought: 0 },
+    });
+  }
+  shownCash.length = 0;
+  state.players.forEach((p, i) => shownCash[i] = p.cash);
+  state.turnCount = 0;
+  state.trendingDeck = shuffle(TRENDING_CARDS);
+  state.earningsDeck = shuffle(EARNINGS_CARDS);
+  showScreen(null);
+  ['topbar', 'sidebar', 'center-msg', 'actionbar'].forEach(id => $(id).classList.remove('hidden'));
+  setGameCamera();
+  buildTokens();
+  log(`Game started with ${numPlayers} players. Everyone starts with ${fmt(settings.startingCash)}.`, true);
+  startTurn();
+};
+
+init3D();
+
+// expose for debugging/testing
+window.state = state;
+window.SPACES = SPACES;
+window.settings = settings;
+window.rentFor = rentFor;
+window.resolveOwnable = resolveOwnable;
+window.settleDebt = settleDebt;
+window.drawCard = drawCard;
+window.runAuction = runAuction;
+window.openTrade = openTrade;
+window.aiEvalTrade = aiEvalTrade;
+window.aiWantsToBuy = aiWantsToBuy;
+window.stepTweens = stepTweens;
+window._three = { get scene() { return scene; }, get renderer() { return renderer; }, get camera() { return camera; }, get controls() { return controls; } };
+</script>
+</body>
+</html>
