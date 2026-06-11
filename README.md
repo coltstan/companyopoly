@@ -20,6 +20,8 @@ python -m http.server 3002
 ## Features
 
 - **3D WebGL board** (Three.js) with modeled tiles, buildings, dice, and player tokens
+- **A sunny "toy world"** — grassy island, drifting clouds, surrounding water, a city skyline rising from the board's center, warm lighting, and soft bloom
+- **Floating player labels** above each token showing live name + cash
 - **Title screen, options, and how-to-play** menus with auto-saved settings
 - **1–4 players, pass-and-play** — humans and/or AI bots in any mix
 - **AI opponents** that buy, build, auction, trade, mortgage, and manage debt on their own

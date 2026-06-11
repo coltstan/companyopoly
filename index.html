@@ -176,6 +176,30 @@
   .draw-card.earnings .dc-glyph { background: linear-gradient(160deg, #8b97ad, #46536b); }
   .draw-card .dc-text { font-size: 14.5px; line-height: 1.6; color: var(--text); font-weight: 550; }
 
+  /* ---------- Floating 3D token labels ---------- */
+  .token-label {
+    display: flex; flex-direction: column; align-items: center;
+    padding: 5px 12px 6px; border-radius: 13px;
+    background: linear-gradient(160deg, rgba(28,33,48,0.92), rgba(16,20,30,0.92));
+    border: 1px solid var(--pc, #4f8bff);
+    box-shadow: 0 6px 18px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.18);
+    font-family: 'Inter', sans-serif;
+    white-space: nowrap; user-select: none;
+    transform: translateY(-4px); transition: transform .2s, box-shadow .2s;
+  }
+  .token-label::after {
+    content: ''; position: absolute; bottom: -5px; left: 50%;
+    width: 9px; height: 9px; transform: translateX(-50%) rotate(45deg);
+    background: rgba(16,20,30,0.92);
+    border-right: 1px solid var(--pc, #4f8bff); border-bottom: 1px solid var(--pc, #4f8bff);
+  }
+  .token-label .tl-name { font-size: 11px; font-weight: 700; color: #fff; line-height: 1.1; }
+  .token-label .tl-cash { font-size: 11.5px; font-weight: 800; color: var(--pc, #4f8bff); font-variant-numeric: tabular-nums; }
+  .token-label.active {
+    transform: translateY(-9px) scale(1.06);
+    box-shadow: 0 10px 26px rgba(0,0,0,.5), 0 0 16px var(--pc, #4f8bff), inset 0 1px 0 rgba(255,255,255,.25);
+  }
+
   /* ---------- Money popups ---------- */
   .money-pop {
     position: fixed; z-index: 30;
@@ -597,6 +621,11 @@
 <script type="module">
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 
 /* ====================== SETTINGS ====================== */
 
@@ -843,14 +872,180 @@ function shuffle(arr) {
 const TILE_H = 0.18;
 const BOARD_TOP = 0.12 + TILE_H;
 
-let scene, camera, renderer, controls, clock;
+let scene, camera, renderer, controls, clock, composer, labelRenderer;
 const tileGroups = [];
 const ownerBars = [];
 const buildingGroups = [];
 const buildingLevels = [];
 const tokenGroups = [];
+const tokenLabels = [];
+const clouds = [];
 let highlightRing;
 const diceMeshes = [];
+
+/* --- bright "toy world" environment --- */
+
+function makeSkyTexture() {
+  const c = document.createElement('canvas');
+  c.width = 16; c.height = 256;
+  const ctx = c.getContext('2d');
+  const g = ctx.createLinearGradient(0, 0, 0, 256);
+  g.addColorStop(0.0, '#3b8fe0');
+  g.addColorStop(0.45, '#7cc0ef');
+  g.addColorStop(0.8, '#bfe4f7');
+  g.addColorStop(1.0, '#e8f6fb');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 16, 256);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function makeCloudTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const ctx = c.getContext('2d');
+  const puff = (x, y, r) => {
+    const rg = ctx.createRadialGradient(x, y, 0, x, y, r);
+    rg.addColorStop(0, 'rgba(255,255,255,0.95)');
+    rg.addColorStop(0.7, 'rgba(255,255,255,0.7)');
+    rg.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = rg;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+  };
+  puff(48, 74, 30); puff(80, 70, 34); puff(64, 60, 28); puff(96, 78, 24);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function buildEnvironment() {
+  // big grassy land
+  const grass = new THREE.Mesh(
+    new THREE.CircleGeometry(60, 72),
+    new THREE.MeshStandardMaterial({ color: 0x86c94e, roughness: 1 })
+  );
+  grass.rotation.x = -Math.PI / 2;
+  grass.position.y = -0.42;
+  grass.receiveShadow = true;
+  scene.add(grass);
+
+  // surrounding water, lower and wider, with a gentle ripple
+  const water = new THREE.Mesh(
+    new THREE.CircleGeometry(140, 64),
+    new THREE.MeshStandardMaterial({ color: 0x3fa9d6, roughness: 0.35, metalness: 0.4 })
+  );
+  water.rotation.x = -Math.PI / 2;
+  water.position.y = -0.7;
+  scene.add(water);
+
+  // scattered toy trees on the grass ring
+  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x8a5a32, roughness: 0.9 });
+  const leafMat = new THREE.MeshStandardMaterial({ color: 0x4e9e3a, roughness: 0.85 });
+  for (let i = 0; i < 26; i++) {
+    const ang = (i / 26) * Math.PI * 2 + (i % 3) * 0.3;
+    const rad = 11 + (i % 4) * 1.6;
+    const tx = Math.cos(ang) * rad, tz = Math.sin(ang) * rad;
+    const tree = new THREE.Group();
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 0.7, 8), trunkMat);
+    trunk.position.y = 0.35; trunk.castShadow = true;
+    const leaves = new THREE.Mesh(new THREE.ConeGeometry(0.6, 1.3, 9), leafMat);
+    leaves.position.y = 1.25; leaves.castShadow = true;
+    tree.add(trunk, leaves);
+    tree.position.set(tx, -0.4, tz);
+    tree.scale.setScalar(0.8 + (i % 5) * 0.18);
+    scene.add(tree);
+  }
+
+  // drifting clouds
+  const cloudMat = new THREE.SpriteMaterial({ map: makeCloudTexture(), transparent: true, opacity: 0.92, depthWrite: false });
+  for (let i = 0; i < 14; i++) {
+    const s = new THREE.Sprite(cloudMat);
+    const ang = Math.random() * Math.PI * 2;
+    const rad = 26 + Math.random() * 22;
+    s.position.set(Math.cos(ang) * rad, 7 + Math.random() * 9, Math.sin(ang) * rad);
+    const sc = 6 + Math.random() * 7;
+    s.scale.set(sc, sc * 0.6, 1);
+    s.userData.speed = 0.12 + Math.random() * 0.18;
+    scene.add(s);
+    clouds.push(s);
+  }
+}
+
+function buildCenterCity() {
+  const city = new THREE.Group();
+  // plaza floor
+  const plaza = new THREE.Mesh(
+    new THREE.BoxGeometry(8.6, 0.06, 8.6),
+    new THREE.MeshStandardMaterial({ color: 0xe9e3d4, roughness: 0.9 })
+  );
+  plaza.position.y = 0.15;
+  plaza.receiveShadow = true;
+  city.add(plaza);
+  // park patch
+  const park = new THREE.Mesh(
+    new THREE.BoxGeometry(2.2, 0.08, 2.2),
+    new THREE.MeshStandardMaterial({ color: 0x7fc24a, roughness: 0.95 })
+  );
+  park.position.set(2.4, 0.17, 2.4);
+  park.receiveShadow = true;
+  city.add(park);
+
+  const glassColors = [0x6db5e8, 0x8fc6ec, 0x5a93c9, 0xa9d4ee, 0xcfe0ee];
+  const warmColors = [0xe8c98a, 0xd8a96a, 0xead8c0];
+  // a loose grid of towers, taller toward the middle
+  const cells = [];
+  for (let gx = -3; gx <= 3; gx++) for (let gz = -3; gz <= 3; gz++) {
+    if (gx === 2 && gz === 2) continue; // leave room for the park
+    if (Math.random() < 0.22) continue;
+    cells.push([gx, gz]);
+  }
+  cells.forEach(([gx, gz], n) => {
+    const dist = Math.hypot(gx, gz);
+    const h = Math.max(0.5, (3.4 - dist * 0.55) * (0.6 + Math.random() * 0.8));
+    const w = 0.62 + Math.random() * 0.28;
+    const warm = Math.random() < 0.3;
+    const tex = makeBuildingTexture(warm ? warmColors[n % warmColors.length] : glassColors[n % glassColors.length], h);
+    const b = new THREE.Mesh(
+      new THREE.BoxGeometry(w, h, w),
+      new THREE.MeshStandardMaterial({ map: tex, roughness: warm ? 0.7 : 0.3, metalness: warm ? 0.1 : 0.5 })
+    );
+    b.position.set(gx * 1.08, 0.18 + h / 2, gz * 1.08);
+    b.castShadow = true; b.receiveShadow = true;
+    city.add(b);
+    // rooftop cap
+    const cap = new THREE.Mesh(
+      new THREE.BoxGeometry(w * 0.5, 0.12, w * 0.5),
+      new THREE.MeshStandardMaterial({ color: 0x3a4860, roughness: 0.6 })
+    );
+    cap.position.set(gx * 1.08, 0.18 + h + 0.06, gz * 1.08);
+    city.add(cap);
+  });
+  scene.add(city);
+}
+
+function makeBuildingTexture(color, h) {
+  const c = document.createElement('canvas');
+  c.width = 64; c.height = 128;
+  const ctx = c.getContext('2d');
+  const hex = '#' + color.toString(16).padStart(6, '0');
+  ctx.fillStyle = hex;
+  ctx.fillRect(0, 0, 64, 128);
+  // windows
+  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  const rows = Math.max(4, Math.round(h * 6));
+  for (let r = 0; r < rows; r++) {
+    for (let col = 0; col < 4; col++) {
+      if (Math.random() < 0.22) continue;
+      ctx.globalAlpha = 0.3 + Math.random() * 0.5;
+      ctx.fillRect(7 + col * 14, 8 + r * (112 / rows), 8, (112 / rows) * 0.55);
+    }
+  }
+  ctx.globalAlpha = 1;
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
 
 function tileTransform(i) {
   const E = j => j === 0 ? 5.3 : (j === 10 ? -5.3 : 4.0 - (j - 1));
@@ -1039,59 +1234,6 @@ function shade(hex, pct) {
   return `rgb(${r},${g},${b})`;
 }
 
-function makeCenterTexture() {
-  const c = document.createElement('canvas');
-  c.width = c.height = 1024;
-  const ctx = c.getContext('2d');
-  const bg = ctx.createLinearGradient(0, 0, 1024, 1024);
-  bg.addColorStop(0, '#f0ece1');
-  bg.addColorStop(1, '#e6e1d2');
-  ctx.fillStyle = bg;
-  ctx.fillRect(0, 0, 1024, 1024);
-  ctx.strokeStyle = 'rgba(120,115,100,0.14)';
-  ctx.lineWidth = 2.5;
-  for (let i = 86; i < 1024; i += 92) {
-    ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, 1024); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(1024, i); ctx.stroke();
-  }
-  ctx.save();
-  ctx.translate(512, 512);
-  ctx.rotate(-Math.PI / 12);
-  ctx.shadowColor = 'rgba(0,0,0,0.3)';
-  ctx.shadowBlur = 30;
-  ctx.shadowOffsetY = 12;
-  const banner = ctx.createLinearGradient(0, -92, 0, 92);
-  banner.addColorStop(0, '#e04141');
-  banner.addColorStop(0.5, '#bf2330');
-  banner.addColorStop(1, '#8e1220');
-  ctx.fillStyle = banner;
-  roundRect(ctx, -410, -92, 820, 184, 36);
-  ctx.fill();
-  ctx.shadowColor = 'transparent';
-  ctx.save();
-  roundRect(ctx, -410, -92, 820, 184, 36);
-  ctx.clip();
-  const gl = ctx.createLinearGradient(0, -92, 0, 10);
-  gl.addColorStop(0, 'rgba(255,255,255,0.32)');
-  gl.addColorStop(1, 'rgba(255,255,255,0)');
-  ctx.fillStyle = gl;
-  ctx.fillRect(-410, -92, 820, 102);
-  ctx.restore();
-  ctx.fillStyle = '#fff';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.font = '850 90px Inter, Arial';
-  ctx.shadowColor = 'rgba(0,0,0,0.35)';
-  ctx.shadowBlur = 6;
-  ctx.shadowOffsetY = 3;
-  ctx.fillText('COMPANYOPOLY', 0, 8);
-  ctx.restore();
-  const tex = new THREE.CanvasTexture(c);
-  tex.anisotropy = 8;
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
-
 function makeDieFaceTexture(v) {
   const PIPS = { 1:[4], 2:[0,8], 3:[0,4,8], 4:[0,2,6,8], 5:[0,2,4,6,8], 6:[0,2,3,5,6,8] };
   const c = document.createElement('canvas');
@@ -1118,11 +1260,11 @@ function makeDieFaceTexture(v) {
 
 function init3D() {
   scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x0a0c12);
-  scene.fog = new THREE.Fog(0x0a0c12, 26, 48);
+  scene.background = makeSkyTexture();
+  scene.fog = new THREE.Fog(0xcfe6f5, 34, 70);
   clock = new THREE.Clock();
 
-  camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.1, 100);
+  camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.1, 200);
   camera.position.set(13, 9, 13);
 
   renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
@@ -1131,7 +1273,18 @@ function init3D() {
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.15;
   document.getElementById('scene').appendChild(renderer.domElement);
+
+  // CSS2D layer for floating player labels
+  labelRenderer = new CSS2DRenderer();
+  labelRenderer.setSize(innerWidth, innerHeight);
+  labelRenderer.domElement.style.position = 'fixed';
+  labelRenderer.domElement.style.top = '0';
+  labelRenderer.domElement.style.left = '0';
+  labelRenderer.domElement.style.pointerEvents = 'none';
+  labelRenderer.domElement.style.zIndex = '5';
+  document.getElementById('scene').appendChild(labelRenderer.domElement);
 
   controls = new OrbitControls(camera, renderer.domElement);
   controls.target.set(0, 0, 0);
@@ -1142,40 +1295,40 @@ function init3D() {
   controls.maxPolarAngle = Math.PI / 2.18;
   controls.minPolarAngle = 0.45;
 
-  scene.add(new THREE.HemisphereLight(0xcfd8ff, 0x202430, 0.85));
-  const sun = new THREE.DirectionalLight(0xfff3e0, 2.1);
-  sun.position.set(9, 16, 6);
+  scene.add(new THREE.HemisphereLight(0xdcefff, 0x5a7a4a, 1.05));
+  const sun = new THREE.DirectionalLight(0xfff1d8, 2.4);
+  sun.position.set(11, 18, 7);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
-  sun.shadow.camera.left = -10; sun.shadow.camera.right = 10;
-  sun.shadow.camera.top = 10; sun.shadow.camera.bottom = -10;
+  sun.shadow.camera.left = -12; sun.shadow.camera.right = 12;
+  sun.shadow.camera.top = 12; sun.shadow.camera.bottom = -12;
   sun.shadow.bias = -0.0004;
+  sun.shadow.radius = 3;
   scene.add(sun);
+  const fill = new THREE.DirectionalLight(0xbfd8ff, 0.45);
+  fill.position.set(-9, 8, -6);
+  scene.add(fill);
 
-  const ground = new THREE.Mesh(
-    new THREE.CircleGeometry(34, 64),
-    new THREE.MeshStandardMaterial({ color: 0x0f1119, roughness: 0.95 })
-  );
-  ground.rotation.x = -Math.PI / 2;
-  ground.receiveShadow = true;
-  scene.add(ground);
+  buildEnvironment();
 
   const base = new THREE.Mesh(
-    new THREE.BoxGeometry(12.9, 0.24, 12.9),
-    new THREE.MeshStandardMaterial({ color: 0x1b1f2a, roughness: 0.6, metalness: 0.15 })
+    new THREE.BoxGeometry(12.9, 0.5, 12.9),
+    new THREE.MeshStandardMaterial({ color: 0xf3ede0, roughness: 0.85 })
   );
+  base.position.y = -0.13;
   base.castShadow = true;
   base.receiveShadow = true;
   scene.add(base);
-
-  const center = new THREE.Mesh(
-    new THREE.PlaneGeometry(9.0, 9.0),
-    new THREE.MeshStandardMaterial({ map: makeCenterTexture(), roughness: 0.85 })
+  // grassy rim around the board edge
+  const rim = new THREE.Mesh(
+    new THREE.BoxGeometry(13.6, 0.42, 13.6),
+    new THREE.MeshStandardMaterial({ color: 0x7cc24a, roughness: 0.95 })
   );
-  center.rotation.x = -Math.PI / 2;
-  center.position.y = 0.125;
-  center.receiveShadow = true;
-  scene.add(center);
+  rim.position.y = -0.2;
+  rim.receiveShadow = true;
+  scene.add(rim);
+
+  buildCenterCity();
 
   const sideMat = new THREE.MeshStandardMaterial({ color: 0xd8d2bf, roughness: 0.8 });
   SPACES.forEach((sp, i) => {
@@ -1235,10 +1388,19 @@ function init3D() {
     diceMeshes.push(die);
   }
 
+  // post-processing: soft bloom on bright highlights + vignette feel via tone map
+  composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera));
+  const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.42, 0.5, 0.85);
+  composer.addPass(bloom);
+  composer.addPass(new OutputPass());
+
   window.addEventListener('resize', () => {
     camera.aspect = innerWidth / innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(innerWidth, innerHeight);
+    composer.setSize(innerWidth, innerHeight);
+    labelRenderer.setSize(innerWidth, innerHeight);
   });
 
   // clickable tiles (only when a game is running and the menu isn't covering the board)
@@ -1345,12 +1507,19 @@ function animate() {
     if (controls.target.distanceTo(followTarget) < 0.05) followActive = false;
   }
   controls.update();
+  const dt = clock.getDelta();
+  const et = clock.getElapsedTime();
   if (highlightRing.visible) {
-    const s = 1 + 0.07 * Math.sin(clock.getElapsedTime() * 4);
+    const s = 1 + 0.07 * Math.sin(et * 4);
     highlightRing.scale.set(s, s, 1);
-    highlightRing.material.opacity = 0.6 + 0.3 * Math.sin(clock.getElapsedTime() * 4);
+    highlightRing.material.opacity = 0.6 + 0.3 * Math.sin(et * 4);
   }
-  renderer.render(scene, camera);
+  for (const cl of clouds) {
+    cl.position.x += cl.userData.speed * dt;
+    if (cl.position.x > 52) cl.position.x = -52;
+  }
+  composer ? composer.render() : renderer.render(scene, camera);
+  if (labelRenderer) labelRenderer.render(scene, camera);
 }
 
 /* --- money popups + screen projection --- */
@@ -1443,6 +1612,27 @@ function buildTokens() {
     g.position.copy(tokenWorldPos(idx, p.pos));
     scene.add(g);
     tokenGroups.push(g);
+    // floating name + cash label
+    const el = document.createElement('div');
+    el.className = 'token-label';
+    el.style.setProperty('--pc', p.color);
+    el.innerHTML = `<span class="tl-name">${p.name}</span><span class="tl-cash">${fmt(p.cash)}</span>`;
+    const label = new CSS2DObject(el);
+    label.position.set(0, 0.95, 0);
+    label.center.set(0.5, 1);
+    g.add(label);
+    tokenLabels.push(el);
+  });
+}
+
+function updateTokenLabels() {
+  state.players.forEach((p, idx) => {
+    const el = tokenLabels[idx];
+    if (!el) return;
+    el.style.display = p.alive ? '' : 'none';
+    el.classList.toggle('active', idx === state.turn && !state.over);
+    el.querySelector('.tl-name').textContent = p.name;
+    el.querySelector('.tl-cash').textContent = p.alive ? fmt(p.cash) : 'OUT';
   });
 }
 
@@ -1458,38 +1648,41 @@ async function animateTokenStep(playerIdx, fromIdx, toIdx) {
   });
 }
 
+const HOUSE_COLORS = [0x4fb0e0, 0x5ec98a, 0xf0975a, 0xe66b7a];
 function buildingMeshFor(level) {
   const g = new THREE.Group();
   if (level >= 4) {
-    const tower = new THREE.Mesh(
-      new THREE.BoxGeometry(0.34, 0.72, 0.34),
-      new THREE.MeshStandardMaterial({ color: 0xf5c542, roughness: 0.25, metalness: 0.6 })
+    // golden HQ skyscraper with stepped tiers + glowing spire
+    const tierMat = new THREE.MeshStandardMaterial({ color: 0xf5c542, roughness: 0.25, metalness: 0.7 });
+    const t1 = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.45, 0.4), tierMat);
+    t1.position.y = 0.225; t1.castShadow = true; g.add(t1);
+    const t2 = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.4, 0.3), tierMat);
+    t2.position.y = 0.62; t2.castShadow = true; g.add(t2);
+    const t3 = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.3, 0.2), tierMat);
+    t3.position.y = 0.95; t3.castShadow = true; g.add(t3);
+    const spire = new THREE.Mesh(
+      new THREE.ConeGeometry(0.07, 0.3, 12),
+      new THREE.MeshStandardMaterial({ color: 0xfff0b0, roughness: 0.15, metalness: 0.8, emissive: 0xffcc44, emissiveIntensity: 1.1 })
     );
-    tower.position.y = 0.36;
-    tower.castShadow = true;
-    g.add(tower);
-    const cap = new THREE.Mesh(
-      new THREE.ConeGeometry(0.22, 0.18, 4),
-      new THREE.MeshStandardMaterial({ color: 0xffe28a, roughness: 0.2, metalness: 0.7, emissive: 0x6b5410, emissiveIntensity: 0.6 })
-    );
-    cap.position.y = 0.81;
-    cap.rotation.y = Math.PI / 4;
-    g.add(cap);
+    spire.position.y = 1.25; g.add(spire);
   } else {
     for (let k = 0; k < level; k++) {
-      const h = 0.22 + k * 0.06;
-      const b = new THREE.Mesh(
-        new THREE.BoxGeometry(0.17, h, 0.17),
-        new THREE.MeshStandardMaterial({ color: 0xe8ecf5, roughness: 0.4 })
+      const h = 0.24 + k * 0.07;
+      const body = new THREE.Mesh(
+        new THREE.BoxGeometry(0.18, h, 0.18),
+        new THREE.MeshStandardMaterial({ color: HOUSE_COLORS[k % HOUSE_COLORS.length], roughness: 0.5 })
       );
-      b.position.set((k - (level - 1) / 2) * 0.24, h / 2, 0);
-      b.castShadow = true;
-      g.add(b);
+      body.position.set((k - (level - 1) / 2) * 0.26, h / 2, 0);
+      body.castShadow = true;
+      g.add(body);
+      // pitched roof
       const roof = new THREE.Mesh(
-        new THREE.BoxGeometry(0.19, 0.045, 0.19),
-        new THREE.MeshStandardMaterial({ color: 0x3a4254, roughness: 0.5 })
+        new THREE.ConeGeometry(0.16, 0.12, 4),
+        new THREE.MeshStandardMaterial({ color: 0x35435c, roughness: 0.55 })
       );
-      roof.position.set(b.position.x, h + 0.022, 0);
+      roof.position.set(body.position.x, h + 0.06, 0);
+      roof.rotation.y = Math.PI / 4;
+      roof.castShadow = true;
       g.add(roof);
     }
   }
@@ -1531,6 +1724,7 @@ function update3D() {
   } else {
     highlightRing.visible = false;
   }
+  if (tokenLabels.length) updateTokenLabels();
 }
 
 const DICE_EUL = { 1:[0,0,0], 2:[-90,0,0], 3:[0,0,90], 4:[0,0,-90], 5:[90,0,0], 6:[180,0,0] };
